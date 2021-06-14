@@ -1,11 +1,7 @@
-import base64
-import hmac
-import hashlib
 import json
 import sys
 import numpy as np
 import math
-import urllib
 import time
 from datetime import datetime
 from datetime import timedelta
@@ -13,31 +9,20 @@ import os
 import csv
 import pandas as pd
 import logging
+from OrderUtils import *
 
-import requests
 from pprint import pprint as pp
 
 DEBUG = False
 
-# 環境変数API_KEY, API_SECRETの設定が必要
-#
-# $ API_KEY='xxxx'
-# $ API_SECRET='xxxx'
-API_KEY=os.environ['API_KEY']
-API_SECRET=os.environ['API_SECRET']
-URL = "https://api.bitbank.cc"
-PUBLIC_URL = "https://public.bitbank.cc"
-PRIVATE_URL = "https://api.bitbank.cc/v1"
-
 # Config
 MA_short = 5 # 移動平均（短期）
 MA_long = 50 # 移動平均（長期）
-TIMEOUT = 5
 CANDLE_TYPE = '1hour' # データ取得間隔
 PAIR = 'qtum_jpy' # 対象通貨
 MA_times = 1 # コインを購入/売却金額する連続GC/DC回数
-BUY_PRICE = 500.0 # 購入金額(円)
-SELL_PRICE = 500.0 # 売却金額(円)
+BUY_PRICE = 1.0 # 購入金額(円)
+SELL_PRICE = 1.0 # 売却金額(円)
 RSI_SELL = 80 # 売りRSIボーダー
 RSI_BUY = 100.0 - RSI_SELL # 買いRSIボーダー
 VOL_ORDER = 50000 # 取引する基準となる取引量(Volume)
@@ -65,112 +50,6 @@ h2.setFormatter(fmt)
 # 5. ロガーにハンドラーを設定する
 logger.addHandler(h)
 logger.addHandler(h2)
-
-
-def createSign(pParams, method, host_url, request_path, secret_key):
-    encode_params = json.dumps(pParams)
-    payload = request_path+encode_params
-    payload = payload.encode(encoding='UTF8')
-    secret_key = secret_key.encode(encoding='UTF8')
-    digest = hmac.new(secret_key, payload, digestmod=hashlib.sha256).hexdigest()
-
-    return digest
-
-def http_get_request(url, params, add_to_headers=None):
-    headers = {
-    }
-    if add_to_headers:
-        headers.update(add_to_headers)
-    postdata = urllib.parse.urlencode(params)
-    # print(headers)
-    try:
-        response = requests.get(url, postdata, headers=headers, timeout=TIMEOUT)
-        # pprint(url)
-        if response.status_code == 200:
-            return response.json()
-        else:
-            return response.json()
-            # return {"status": "fail"}
-    except Exception as e:
-        print("httpGet failed, detail is:%s" %e)
-        return {"status":"fail","msg": "%s"%e}
-
-def http_post_request(url, params, add_to_headers=None):
-    headers = {
-        'Content-Type': 'application/json'
-    }
-    if add_to_headers:
-        headers.update(add_to_headers)
-    postdata = json.dumps(params)
-
-    try:
-        response = requests.post(url, postdata, headers=headers, timeout=TIMEOUT)
-        if response.status_code == 200:
-            return response.json()
-        else:
-            return response.json()
-    except Exception as e:
-        print("httpPost failed, detail is:%s" % e)
-        return {"status":"fail","msg": "%s"%e}
-
-def api_key_get(url, request_path, params, ACCESS_KEY, SECRET_KEY):
-    # UNIX時間
-    utctime = str(int(time.time()))
-
-    params = {
-        'ACCESS-NONCE':utctime,
-        'ACCESS-SIGNATURE':createSign([], "GET", "", utctime+request_path, SECRET_KEY),
-        'ACCESS-KEY':ACCESS_KEY
-        }
-    # pprint(params)
-    return http_get_request(url+request_path, [], params)
-
-def api_key_post(url, request_path, params, access_key, secret_key):
-    method = 'POST'
-    # UNIX時間
-    utctime = str(int(time.time()))
-
-    headers = {
-        'ACCESS-NONCE':utctime,
-        'ACCESS-SIGNATURE':createSign(params, "", "", utctime, secret_key),
-        'ACCESS-KEY':access_key
-        }
-
-    return http_post_request(url+request_path, params, headers)
-
-def get_assets():
-    request_path = "/v1/user/assets"
-
-    return api_key_get(URL, request_path, [], API_KEY, API_SECRET)
-
-def get_ticker(pair):
-    request_path = "/"+ pair + "/ticker"
-
-    return api_key_get(PUBLIC_URL, request_path, [], API_KEY, API_SECRET)
-
-def get_candlestick(candletype, pair, day):
-    request_path = "/" + pair + "/candlestick/" + candletype + "/" + day
-    # pp(PUBLIC_URL+request_path)
-    return api_key_get(PUBLIC_URL, request_path, [], "", "")
-
-def daterange(_start, _end):
-    for n in range((_end - _start).days):
-        yield _start + timedelta(n)
-
-def post_order(pair, amount, price, side, type, post_only=False):
-    request_path = "/user/spot/order"
-    params = {
-        'pair': pair,
-        'amount': amount,
-        'side': side,
-        'type': type,
-    }
-    if price != None:
-        params["price"] = price
-    if post_only != None:
-        params["post_only"] = post_only
-
-    return api_key_post(PRIVATE_URL, request_path, params, API_KEY, API_SECRET)
 
 def get_ohlcv(date, size):
     df = pd.DataFrame()
