@@ -75,8 +75,13 @@ def api_key_get(url, request_path, params, ACCESS_KEY, SECRET_KEY):
         'ACCESS-SIGNATURE':createSign([], "GET", "", utctime+request_path, SECRET_KEY),
         'ACCESS-KEY':ACCESS_KEY
         }
-    # pp(params)
-    return http_get_request(url+request_path, [], params)
+    response = http_get_request(url+request_path, [], params)
+
+    if response['success'] == 0:
+        if response['data']['code'] == 10000:
+            # 10000 URLが存在しません
+            raise Exception("URLが存在しません。[" + url+request_path + "]")
+    return response
 
 def api_key_post(url, request_path, params, access_key, secret_key):
     method = 'POST'

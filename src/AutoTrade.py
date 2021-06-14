@@ -13,11 +13,11 @@ from OrderUtils import *
 
 from pprint import pprint as pp
 
-DEBUG = False
+DEBUG = True
 
 # Config
 MA_short = 5 # 移動平均（短期）
-MA_long = 50 # 移動平均（長期）
+MA_long = 100 # 移動平均（長期）
 CANDLE_TYPE = '1hour' # データ取得間隔
 PAIR = 'qtum_jpy' # 対象通貨
 MA_times = 1 # コインを購入/売却金額する連続GC/DC回数
@@ -51,22 +51,24 @@ h2.setFormatter(fmt)
 logger.addHandler(h)
 logger.addHandler(h2)
 
-def get_ohlcv(date, size):
-    df = pd.DataFrame()
+# dateからsize単位時間分のOHLCVデータを取得する
+def get_ohlcv(date, size, candle_type):
+    ohlcv_df = pd.DataFrame()
 
     # 必要なチャートを取得
-    while(len(df) < size):
+    while(len(ohlcv_df) < size):
         d_str = date.strftime('%Y%m%d')
         logger.debug(d_str + "分 データ取得開始")
-        cd = get_candlestick(CANDLE_TYPE, PAIR, d_str)
+        cd = get_candlestick(candle_type, PAIR, d_str)
 
         if cd['success'] == 0:
             logger.info(d_str + "分 データなし")
             logger.info(cd)
+
             date = date - timedelta(days=1)
             continue
 
-        ohlcv = get_candlestick(CANDLE_TYPE, PAIR, d_str)["data"]["candlestick"][0]["ohlcv"]
+        ohlcv = get_candlestick(candle_type, PAIR, d_str)["data"]["candlestick"][0]["ohlcv"]
         columns = ['Open', 'High', 'Low', 'Close', 'Volume', 'Date']
 
         df_new = pd.DataFrame(data=ohlcv, columns=columns)
@@ -75,13 +77,13 @@ def get_ohlcv(date, size):
         df_new = df_new.astype(float)
         df_new.index = df_new.index.tz_convert('Asia/Tokyo')
 
-        df = pd.concat([df_new, df])
+        ohlcv_df = pd.concat([df_new, ohlcv_df])
         date = date - timedelta(days=1)
 
-    return df
+    return ohlcv_df
 
+# 移動平均の差(ma_diff)と連続GC/DC回数を計算し、返却
 def get_madata(df):
-    # 移動平均の差(ma_diff)を計算
     ma_short = df.rolling(MA_short).mean()
     ma_long = df.rolling(MA_long).mean()
     ma_diff = ma_short['Close'] - ma_long['Close']
@@ -103,6 +105,7 @@ def get_madata(df):
 
     # df = df.assign(GCDC_times=times_list)
 
+# RSIを計算
 def get_rsi(df):
     # RSI計算
     diff = df['Close'] - df['Open']
@@ -116,7 +119,7 @@ def get_rsi(df):
 
     return rsi
 
-# 連続times回DCまたはGCを継続しているか
+# 連続times回DCまたはGCを継続しているか判定
 def is_gcdc(df, times):
     return df['GCDC_times'][-1] % times == 0
 
@@ -136,12 +139,11 @@ def buysell_by_vol(df):
     return df['Volume'][-1] >= VOL_ORDER
 
 if __name__ == "__main__":
+    pd.set_option('display.max_rows', 30)
 
     date = datetime.now() - timedelta(days=1) ####################################
     # date = datetime.now()
-    pd.set_option('display.max_rows', 30)
-
-    df = get_ohlcv(date, MA_long*2)
+    df = get_ohlcv(date, MA_long*2, CANDLE_TYPE)
 
     # 移動平均の差分と、連続GC/DC回数を取得
     df['ma_diff'], df['GCDC_times'] = get_madata(df)
@@ -151,6 +153,7 @@ if __name__ == "__main__":
 
     logger.info("\n" + str(df.tail(10)))
 
+    df.to_csv("test_df.csv")
     # MA_times回連続してGC/DCした場合、コインを購入/売却する
     if is_gcdc(df, MA_times) and buysell_by_vol(df):
 
