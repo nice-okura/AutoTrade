@@ -39,6 +39,8 @@ PAIR = 'qtum_jpy' # 対象通貨
 MA_times = 12 # コインを購入/売却金額する連続GC/DC回数
 BUY_PRICE = 500.0 # 購入金額(円)
 SELL_PRICE = 500.0 # 売却金額(円)
+RSI_SELL = 80 # 売りRSIボーダー
+RSI_BUY = 100.0 - RSI_SELL # 買いRSIボーダー
 
 # 1. ロガーを取得する
 logger = logging.getLogger(__name__)
@@ -199,13 +201,7 @@ def get_ohlcv(date, size):
 
     return df
 
-if __name__ == "__main__":
-
-    date = datetime.now()
-    pd.set_option('display.max_rows', 10)
-
-    df = get_ohlcv(date, MA_long*2)
-
+def get_madata(df):
     # 移動平均の差(ma_diff)を計算
     ma_short = df.rolling(MA_short).mean()
     ma_long = df.rolling(MA_long).mean()
@@ -225,7 +221,35 @@ if __name__ == "__main__":
             times_list.append(1)
         elif d is not np.nan:
             times_list.append(times_list[i-1]+1)
-    df = df.assign(GCDC_times=times_list)
+
+    return df['ma_diff'], times_list
+
+    # df = df.assign(GCDC_times=times_list)
+
+def get_rsi(df):
+    # RSI計算
+    diff = df['Close'] - df['Open']
+    up, down = diff.copy(), diff.copy()
+    up[up < 0] = 0
+    down[down > 0] = 0
+    up_sma_14 = up.rolling(window=14, center=False).mean()
+    down_sma_14 = down.abs().rolling(window=14, center=False).mean()
+    rs = up_sma_14 / down_sma_14
+    rsi = 100.0 - (100.0 / (1.0 + rs))
+
+    return rsi
+
+if __name__ == "__main__":
+
+    date = datetime.now() - timedelta(days=1) ####################################
+    # date = datetime.now()
+    pd.set_option('display.max_rows', 30)
+
+    df = get_ohlcv(date, MA_long*2)
+
+    df['ma_diff'], df['GCDC_times'] = get_madata(df)
+
+    df['rsi'] = get_rsi(df)
 
     logger.info("\n" + str(df.tail(10)))
 
