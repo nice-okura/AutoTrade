@@ -87,7 +87,6 @@ def get_madata(df):
     ma_short = df.rolling(MA_short).mean()
     ma_long = df.rolling(MA_long).mean()
     ma_diff = ma_short['Close'] - ma_long['Close']
-
     # 連続GC/DC回数を計算
     times_list = []
     for i, d in enumerate(ma_diff):
