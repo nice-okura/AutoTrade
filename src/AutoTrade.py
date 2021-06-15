@@ -23,7 +23,7 @@ PAIR = 'qtum_jpy' # 対象通貨
 MA_times = 1 # コインを購入/売却金額する連続GC/DC回数
 BUY_PRICE = 1.0 # 購入金額(円)
 SELL_PRICE = 1.0 # 売却金額(円)
-RSI_SELL = 80 # 売りRSIボーダー
+RSI_SELL = 80.0 # 売りRSIボーダー
 RSI_BUY = 100.0 - RSI_SELL # 買いRSIボーダー
 VOL_ORDER = 50000 # 取引する基準となる取引量(Volume)
 
@@ -118,7 +118,7 @@ def get_rsi(df):
 
     return rsi
 
-# 連続times回DCまたはGCを継続しているか判定
+# 連続times x n回 DCまたはGCを継続しているか判定
 def is_gcdc(df, times):
     return df['GCDC_times'][-1] % times == 0
 
@@ -126,9 +126,9 @@ def is_gcdc(df, times):
 def buysell_by_rsi(df):
     buysell = 0
 
-    if df['rsi'][-1] >= RSI_BUY:
+    if df['rsi'][-1] <= RSI_BUY:
         buysell = 1
-    elif df['rsi'][-1] <= RSI_SELL:
+    elif df['rsi'][-1] >= RSI_SELL:
         buysell = -1
 
     return buysell
