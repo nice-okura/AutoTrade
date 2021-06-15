@@ -23,9 +23,11 @@ PAIR = 'qtum_jpy' # 対象通貨
 MA_times = 1 # コインを購入/売却金額する連続GC/DC回数
 BUY_PRICE = 1.0 # 購入金額(円)
 SELL_PRICE = 1.0 # 売却金額(円)
-RSI_SELL = 80.0 # 売りRSIボーダー
+RSI_SELL = 50.0 # 売りRSIボーダー
 RSI_BUY = 100.0 - RSI_SELL # 買いRSIボーダー
-VOL_ORDER = 50000 # 取引する基準となる取引量(Volume)
+VOL_ORDER = 5000 # 取引する基準となる取引量(Volume)
+BUY = 1
+SELL = -1
 
 # 1. ロガーを取得する
 logger = logging.getLogger(__name__)
@@ -102,8 +104,6 @@ def get_madata(df):
 
     return ma_diff, times_list
 
-    # df = df.assign(GCDC_times=times_list)
-
 # RSIを計算
 def get_rsi(df):
     # RSI計算
@@ -127,9 +127,9 @@ def buysell_by_rsi(df):
     buysell = 0
 
     if df['rsi'][-1] <= RSI_BUY:
-        buysell = 1
+        buysell = BUY
     elif df['rsi'][-1] >= RSI_SELL:
-        buysell = -1
+        buysell = SELL
 
     return buysell
 
@@ -137,11 +137,30 @@ def buysell_by_rsi(df):
 def buysell_by_vol(df):
     return df['Volume'][-1] >= VOL_ORDER
 
+def order(buysell, price_yen, coin_price):
+    """
+    コインを購入もしくは売却
+    """
+    price = price_yen/coin_price
+    order_mode, order_str = ("buy", "購入") if buysell == BUY else ("sell", "売却")
+
+    if DEBUG == False:
+        order_result = post_order(PAIR, price, "", order_mode, "market")
+    else:
+        order_result = {'success': 0, 'data': "デバッグモード"}
+    if order_result['success'] == 1:
+        # オーダー成功
+        price = order_result['data']['start_amount']
+        logger.info(PAIR + "を" + str(price_yen) + "円で" + str(price) + order_str)
+    else:
+        # オーダー失敗
+        logger.error("オーダー失敗")
+        logger.error(order_result)
+
 if __name__ == "__main__":
     pd.set_option('display.max_rows', 30)
 
-    date = datetime.now() - timedelta(days=1) ####################################
-    # date = datetime.now()
+    date = datetime.now() - timedelta(days=1)
     df = get_ohlcv(date, MA_long*2, CANDLE_TYPE)
 
     # 移動平均の差分と、連続GC/DC回数を取得
@@ -152,9 +171,9 @@ if __name__ == "__main__":
 
     logger.info("\n" + str(df.tail(10)))
 
-    df.to_csv("test_df.csv")
     # MA_times回連続してGC/DCした場合、コインを購入/売却する
     if is_gcdc(df, MA_times) and buysell_by_vol(df):
+        gcdc = "GC" if df['ma_diff'][-1] >= 0 else "DC"
 
         coin_price = df['Close'][-1]
         logger.debug("df['GCDC_times'][-1]: " + str(df['GCDC_times'][-1]) + " coin_price: " + str(coin_price))
@@ -162,35 +181,11 @@ if __name__ == "__main__":
         # ##################
         # 売　却
         # ##################
-        if df['ma_diff'][-1] < 0 or buysell_by_rsi(df) == -1:
-            price = SELL_PRICE/coin_price
-            if DEBUG == False:
-                order_result = post_order(PAIR, price, "", "sell", "market")
-            else:
-                order_result = {'success': 0, 'data': "デバッグモード"}
-            if order_result['success'] == 1:
-                # オーダー成功
-                price = order_result['data']['start_amount']
-                logger.info(PAIR + "を" + str(SELL_PRICE) + "円で" + str(price) + " 売却")
-            else:
-                # オーダー失敗
-                logger.error("オーダー失敗")
-                logger.error(order_result)
+        if gcdc == "DC" or buysell_by_rsi(df) == SELL:
+            order(SELL, SELL_PRICE, coin_price)
 
         # ##################
         # 購　入
         # ##################
-        if df['ma_diff'][-1] >= 0 or buysell_by_rsi(df) == 1:
-            price = BUY_PRICE/coin_price
-            if DEBUG == False:
-                order_result = post_order(PAIR, price, "", "buy", "market")
-            else:
-                order_result = {'success': 0, 'data': "デバッグモード"}
-            if order_result['success'] == 1:
-                # オーダー成功
-                price = order_result['data']['start_amount']
-                logger.info(PAIR + "を" + str(BUY_PRICE) + "円で" + str(price) + " 購入")
-            else:
-                # オーダー失敗
-                logger.error("オーダー失敗")
-                logger.error(order_result)
+        if gcdc == "GC" or buysell_by_rsi(df) == BUY:
+            order(BUY, BUY_PRICE, coin_price)
