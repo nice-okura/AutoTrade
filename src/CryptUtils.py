@@ -6,20 +6,18 @@ import hmac
 import hashlib
 import urllib
 import os
+import csv
+import datetime
 from pprint import pprint as pp
 
 TIMEOUT = 5
 
-# 環境変数API_KEY, API_SECRETの設定が必要
-#
-# $ API_KEY='xxxx'
-# $ API_SECRET='xxxx'
-# API_KEY=os.environ['API_KEY']
-# API_SECRET=os.environ['API_SECRET']
-
 def createSign(pParams, method, host_url, request_path, secret_key):
-    encode_params = json.dumps(pParams)
+    encode_params = ""
+    if len(pParams) != 0:
+        encode_params = json.dumps(pParams)
     payload = request_path+encode_params
+
     payload = payload.encode(encoding='UTF8')
     secret_key = secret_key.encode(encoding='UTF8')
     digest = hmac.new(secret_key, payload, digestmod=hashlib.sha256).hexdigest()
@@ -92,3 +90,37 @@ def api_key_post(url, request_path, params, access_key, secret_key):
         }
 
     return http_post_request(url+request_path, params, headers)
+
+def setup_csvrowdata(total_assets):
+    data = {}
+    data['total_assets'] = total_assets
+
+    dt_now = datetime.datetime.now()
+    dt = dt_now.strftime('%Y-%m-%d %H:%M:%S')
+    dt_month = dt_now.strftime('%y%m')
+    data['time'] = dt
+
+    return data, dt_month
+
+def write_csvfile(filename, fieldnames, data):
+    f_flg = os.path.exists(filename)
+
+    with open(filename, 'a', newline='') as f:
+        w = csv.DictWriter(f, fieldnames=fieldnames)
+        if not f_flg:
+            w.writeheader()
+        w.writerow(data)
+
+def create_data_and_fieldnames(balance_list, data, currency_list):
+    # CSV の列名
+    fieldnames = ["time", "total_assets"]
+
+    for b in balance_list:
+        for c in currency_list:
+            if c in b['currency']:
+                data[c+'_asset'] = b['asset']
+                data[c+'_price'] = b['price']
+                data[c+'_balance'] = b['balance']
+                fieldnames += [c+'_asset', c+'_price', c+'_balance']
+
+    return data, fieldnames

@@ -9,7 +9,7 @@ class CryptService:
         self.__secret_key = secret_key
 
     def get_assets(self):
-        request_path = "/user/assets"
+        request_path = "/v1/user/assets"
 
         return api_key_get(self.__url, request_path, [], self.__access_key, self.__secret_key)
 
