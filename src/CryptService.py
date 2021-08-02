@@ -1,12 +1,12 @@
-from CryptUtils import api_key_get, api_key_post
+from CryptUtils import api_key_get, api_key_post, setup_csvrowdata, create_data_and_fieldnames, write_csvfile
 
 class CryptService:
-
-    def __init__(self, url, public_url, access_key, secret_key):
+    def __init__(self, url, public_url, access_key, secret_key, exchange_name):
         self.__url = url
         self.__public_url = public_url
         self.__access_key = access_key
         self.__secret_key = secret_key
+        self.__exchange_name = exchange_name
 
     def get_assets(self):
         request_path = "/v1/user/assets"
@@ -37,3 +37,13 @@ class CryptService:
             params["post_only"] = post_only
 
         return api_key_post(self.__url, request_path, params, self.__access_key, self.__secret_key)
+
+    def create_currency_asset(self):
+        balance_list, total_assets, currency_list = self.get_currency_data()
+
+        data, dt_month = setup_csvrowdata(total_assets)
+        data, fieldnames = create_data_and_fieldnames(balance_list, data, currency_list)
+
+        filename = './cryptocurrency_' + self.__exchange_name + '_' + dt_month + '.csv'
+
+        write_csvfile(filename, fieldnames, data)
