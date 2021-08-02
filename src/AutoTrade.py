@@ -9,11 +9,14 @@ import os
 import csv
 import pandas as pd
 import logging
-from OrderUtils import *
+from CryptService import CryptService
 
 from pprint import pprint as pp
 
-DEBUG = True
+DEBUG = False
+
+URL = "https://api.bitbank.cc/v1"
+PUBLIC_URL = "https://public.bitbank.cc"
 
 # Config
 MA_short = 5 # 移動平均（短期）
@@ -23,7 +26,7 @@ PAIR = 'qtum_jpy' # 対象通貨
 MA_times = 1 # コインを購入/売却金額する連続GC/DC回数
 BUY_PRICE = 1.0 # 購入金額(円)
 SELL_PRICE = 1.0 # 売却金額(円)
-RSI_SELL = 50.0 # 売りRSIボーダー
+RSI_SELL = 80.0 # 売りRSIボーダー
 RSI_BUY = 100.0 - RSI_SELL # 買いRSIボーダー
 VOL_ORDER = 5000 # 取引する基準となる取引量(Volume)
 BUY = 1
@@ -53,6 +56,8 @@ h2.setFormatter(fmt)
 logger.addHandler(h)
 logger.addHandler(h2)
 
+cs = CryptService(URL, PUBLIC_URL, os.environ['API_KEY'], os.environ['API_SECRET'])
+
 # dateからsize単位時間分のOHLCVデータを取得する
 def get_ohlcv(date, size, candle_type):
     ohlcv_df = pd.DataFrame()
@@ -61,7 +66,7 @@ def get_ohlcv(date, size, candle_type):
     while(len(ohlcv_df) < size):
         d_str = date.strftime('%Y%m%d')
         logger.debug(d_str + "分 データ取得開始")
-        cd = get_candlestick(candle_type, PAIR, d_str)
+        cd = cs.get_candlestick(candle_type, PAIR, d_str)
 
         if cd['success'] == 0:
             logger.info(d_str + "分 データなし")
@@ -70,7 +75,7 @@ def get_ohlcv(date, size, candle_type):
             date = date - timedelta(days=1)
             continue
 
-        ohlcv = get_candlestick(candle_type, PAIR, d_str)["data"]["candlestick"][0]["ohlcv"]
+        ohlcv = cs.get_candlestick(candle_type, PAIR, d_str)["data"]["candlestick"][0]["ohlcv"]
         columns = ['Open', 'High', 'Low', 'Close', 'Volume', 'Date']
 
         df_new = pd.DataFrame(data=ohlcv, columns=columns)
@@ -145,17 +150,23 @@ def order(buysell, price_yen, coin_price):
     order_mode, order_str = ("buy", "購入") if buysell == BUY else ("sell", "売却")
 
     if DEBUG == False:
-        order_result = post_order(PAIR, price, "", order_mode, "market")
+        order_result = cs.post_order(PAIR, price, "", order_mode, "market")
     else:
         order_result = {'success': 0, 'data': "デバッグモード"}
     if order_result['success'] == 1:
         # オーダー成功
         price = order_result['data']['start_amount']
         logger.info(PAIR + "を" + str(price_yen) + "円で" + str(price) + order_str)
+
+        return price
     else:
         # オーダー失敗
         logger.error("オーダー失敗")
         logger.error(order_result)
+
+        return -1
+
+    return -1
 
 if __name__ == "__main__":
     pd.set_option('display.max_rows', 30)

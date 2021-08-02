@@ -8,17 +8,14 @@ import urllib
 import os
 from pprint import pprint as pp
 
-URL = "https://api.bitbank.cc"
-PUBLIC_URL = "https://public.bitbank.cc"
-PRIVATE_URL = "https://api.bitbank.cc/v1"
 TIMEOUT = 5
 
 # 環境変数API_KEY, API_SECRETの設定が必要
 #
 # $ API_KEY='xxxx'
 # $ API_SECRET='xxxx'
-API_KEY=os.environ['API_KEY']
-API_SECRET=os.environ['API_SECRET']
+# API_KEY=os.environ['API_KEY']
+# API_SECRET=os.environ['API_SECRET']
 
 def createSign(pParams, method, host_url, request_path, secret_key):
     encode_params = json.dumps(pParams)
@@ -95,33 +92,3 @@ def api_key_post(url, request_path, params, access_key, secret_key):
         }
 
     return http_post_request(url+request_path, params, headers)
-
-def get_assets():
-    request_path = "/v1/user/assets"
-
-    return api_key_get(URL, request_path, [], API_KEY, API_SECRET)
-
-def get_ticker(pair):
-    request_path = "/"+ pair + "/ticker"
-
-    return api_key_get(PUBLIC_URL, request_path, [], API_KEY, API_SECRET)
-
-def get_candlestick(candletype, pair, day):
-    request_path = "/" + pair + "/candlestick/" + candletype + "/" + day
-    # pp(PUBLIC_URL+request_path)
-    return api_key_get(PUBLIC_URL, request_path, [], "", "")
-
-def post_order(pair, amount, price, side, type, post_only=False):
-    request_path = "/user/spot/order"
-    params = {
-        'pair': pair,
-        'amount': amount,
-        'side': side,
-        'type': type,
-    }
-    if price != None:
-        params["price"] = price
-    if post_only != None:
-        params["post_only"] = post_only
-
-    return api_key_post(PRIVATE_URL, request_path, params, API_KEY, API_SECRET)

@@ -2,6 +2,8 @@ from AutoTrade import *
 import pytest
 from datetime import datetime
 import pandas as pd
+import OrderUtils
+from CryptService import CryptService
 
 def load_csv2pd(filename):
     df = pd.read_csv(filename)
@@ -209,3 +211,19 @@ def test_buysell_by_vol(get_madata_gcdc81_fixture):
     df = get_madata_gcdc81_fixture['df']
 
     assert buysell_by_vol(df)
+
+def test_order_buy(mocker):
+    mocker.patch.object(CryptService, 'post_order', return_value={'success': 1, 'data': {'start_amount': 100.0}})
+    assert order(BUY, 1.0, 100.0) == 100.0
+
+def test_order_sell(mocker):
+    mocker.patch.object(CryptService, 'post_order', return_value={'success': 1, 'data': {'start_amount': 100.0}})
+    assert order(SELL, 1.0, 100.0) == 100.0
+
+def test_order_buy_error(mocker):
+    mocker.patch.object(CryptService, 'post_order', return_value={'success': 0, 'data': 'モック'})
+    assert order(BUY, 1.0, 100.0) == -1
+
+def test_order_sell_error(mocker):
+    mocker.patch.object(CryptService, 'post_order', return_value={'success': 0, 'data': 'モック'})
+    assert order(SELL, 1.0, 100.0) == -1
