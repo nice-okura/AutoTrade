@@ -2,7 +2,6 @@ from AutoTrade import *
 import pytest
 from datetime import datetime
 import pandas as pd
-import OrderUtils
 from CryptService import CryptService
 
 def load_csv2pd(filename):

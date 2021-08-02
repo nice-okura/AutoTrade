@@ -1,0 +1,2 @@
+def utilA():
+    return "returnA"

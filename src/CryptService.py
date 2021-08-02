@@ -1,4 +1,4 @@
-from OrderUtils import api_key_get, api_key_post
+from CryptUtils import api_key_get, api_key_post
 
 class CryptService:
 
