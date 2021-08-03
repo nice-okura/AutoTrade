@@ -47,3 +47,8 @@ class CryptService:
         filename = './cryptocurrency_' + self.__exchange_name + '_' + dt_month + '.csv'
 
         write_csvfile(filename, fieldnames, data)
+
+    def get_currency_summary(self):
+        balance_list, total_assets, currency_list = self.get_currency_data()
+
+        
