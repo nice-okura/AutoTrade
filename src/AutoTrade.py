@@ -182,12 +182,15 @@ def order(buysell, price_yen, coin_price):
 
     return -1
 
-def buyORsell(df):
+def buyORsell(df, logic=0):
     """売りか買いか判定
 
     Parameters
     -----------
     df : DataFrame
+    logic : int
+        0 : デフォルトロジック
+        1 : ・・・
 
     Return
     -----------
@@ -207,12 +210,15 @@ def buyORsell(df):
     """
         メインの売り買いロジック
     """
-    if buysell_by_vol(df):
-        if (is_gcdc(df, MA_times) and gcdc == "GC") or buysell_by_rsi(df) == BUY:
-            buysell = BUY
-        elif (is_gcdc(df, MA_times) and gcdc == "DC") or buysell_by_rsi(df) == SELL:
-            buysell = SELL
-
+    if logic == 0:
+        if buysell_by_vol(df):
+            if (is_gcdc(df, MA_times) and gcdc == "GC") or buysell_by_rsi(df) == BUY:
+                buysell = BUY
+            elif (is_gcdc(df, MA_times) and gcdc == "DC") or buysell_by_rsi(df) == SELL:
+                buysell = SELL
+    else:
+        logger.error("対応ロジックなし logic: " + logic)
+        
     return buysell
 
 def show_buysellpoint(df):
