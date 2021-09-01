@@ -13,22 +13,25 @@ from CryptService import CryptService
 
 from pprint import pprint as pp
 
-DEBUG = False
+DEBUG = True
+
+# 過去のデータから売り買い判定のみ表示
+SHOW_BUYSELLPOINT_FLG = True
 
 URL = "https://api.bitbank.cc/v1"
 PUBLIC_URL = "https://public.bitbank.cc"
 
 # Config
 MA_short = 5 # 移動平均（短期）
-MA_long = 100 # 移動平均（長期）
+MA_long = 50 # 移動平均（長期）
 CANDLE_TYPE = '1hour' # データ取得間隔
 PAIR = 'qtum_jpy' # 対象通貨
-MA_times = 1 # コインを購入/売却金額する連続GC/DC回数
+MA_times = 3 # コインを購入/売却金額する連続GC/DC回数
 BUY_PRICE = 1.0 # 購入金額(円)
 SELL_PRICE = 1.0 # 売却金額(円)
 RSI_SELL = 80.0 # 売りRSIボーダー
 RSI_BUY = 100.0 - RSI_SELL # 買いRSIボーダー
-VOL_ORDER = 5000 # 取引する基準となる取引量(Volume)
+VOL_ORDER = 50000 # 取引する基準となる取引量(Volume)
 BUY = 1
 SELL = -1
 
@@ -56,10 +59,21 @@ h2.setFormatter(fmt)
 logger.addHandler(h)
 logger.addHandler(h2)
 
-cs = CryptService(URL, PUBLIC_URL, os.environ['API_KEY'], os.environ['API_SECRET'])
+cs = CryptService(URL, PUBLIC_URL, os.environ['API_KEY'], os.environ['API_SECRET'], "bitbank")
 
-# dateからsize単位時間分のOHLCVデータを取得する
 def get_ohlcv(date, size, candle_type):
+    """dateからsize単位時間分のOHLCVデータを取得する
+
+    Parameters
+    ----------
+    TODO
+
+    Returns
+    -------
+    TODO
+
+    """
+
     ohlcv_df = pd.DataFrame()
 
     # 必要なチャートを取得
@@ -168,6 +182,53 @@ def order(buysell, price_yen, coin_price):
 
     return -1
 
+def buyORsell(df):
+    """売りか買いか判定
+
+    Parameters
+    -----------
+    df : DataFrame
+
+    Return
+    -----------
+    buysell : int
+        BUY : 買い
+        SELL : 売り
+        0 : ステイ
+    """
+    buysell = 0
+
+    if 'ma_diff' in df.columns:
+        gcdc = "GC" if df['ma_diff'][-1] >= 0 else "DC"
+    else:
+        logger.warning("ma_diff カラムがありません")
+        return buysell
+
+    """
+        メインの売り買いロジック
+    """
+    if buysell_by_vol(df):
+        if (is_gcdc(df, MA_times) and gcdc == "GC") or buysell_by_rsi(df) == BUY:
+            buysell = BUY
+        elif (is_gcdc(df, MA_times) and gcdc == "DC") or buysell_by_rsi(df) == SELL:
+            buysell = SELL
+
+    return buysell
+
+def show_buysellpoint(df):
+    """
+        過去のデータ(df)から、売り買いポイントをすべて表示
+    """
+    df['BUYSELL'] = 0
+
+    for i in range(len(df)):
+        tmp_df = df.iloc[i:i+1]
+        if buyORsell(tmp_df) == BUY:
+            df.iat[i,8] = "BUY"
+        elif buyORsell(tmp_df) == SELL:
+            df.iat[i,8] = "SELL"
+    logger.info("\n" + str(df.tail(30)))
+
 if __name__ == "__main__":
     pd.set_option('display.max_rows', 30)
 
@@ -180,23 +241,41 @@ if __name__ == "__main__":
     # RSIを取得
     df['rsi'] = get_rsi(df)
 
-    logger.info("\n" + str(df.tail(10)))
+    logger.info("\n" + str(df.tail(40)))
 
-    # MA_times回連続してGC/DCした場合、コインを購入/売却する
-    if is_gcdc(df, MA_times) and buysell_by_vol(df):
-        gcdc = "GC" if df['ma_diff'][-1] >= 0 else "DC"
+    # 対象通貨の現在の価格
+    coin_price = df['Close'][-1]
 
-        coin_price = df['Close'][-1]
-        logger.debug("df['GCDC_times'][-1]: " + str(df['GCDC_times'][-1]) + " coin_price: " + str(coin_price))
-
-        # ##################
-        # 売　却
-        # ##################
-        if gcdc == "DC" or buysell_by_rsi(df) == SELL:
+    if SHOW_BUYSELLPOINT_FLG:
+        show_buysellpoint(df)
+    else:
+        if buyORsell(df) == SELL:
+            # ##################
+            # 売　却
+            # ##################
             order(SELL, SELL_PRICE, coin_price)
 
-        # ##################
-        # 購　入
-        # ##################
-        if gcdc == "GC" or buysell_by_rsi(df) == BUY:
+        elif buyORsell(df) == BUY:
+            # ##################
+            # 購　入
+            # ##################
             order(BUY, BUY_PRICE, coin_price)
+
+        # # MA_times回連続してGC/DCし、取引量もVOL_ORDER以上だった、コインを購入/売却する
+        # if is_gcdc(df, MA_times) and buysell_by_vol(df):
+        #     gcdc = "GC" if df['ma_diff'][-1] >= 0 else "DC"
+        #
+        #     coin_price = df['Close'][-1]
+        #     logger.debug("df['GCDC_times'][-1]: " + str(df['GCDC_times'][-1]) + " coin_price: " + str(coin_price))
+        #
+        #     # ##################
+        #     # 売　却
+        #     # ##################
+        #     if gcdc == "DC" and buysell_by_rsi(df) == SELL:
+        #         order(SELL, SELL_PRICE, coin_price)
+        #
+        #     # ##################
+        #     # 購　入
+        #     # ##################
+        #     if gcdc == "GC" and buysell_by_rsi(df) == BUY:
+        #         order(BUY, BUY_PRICE, coin_price)
