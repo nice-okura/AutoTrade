@@ -15,8 +15,10 @@ from pprint import pprint as pp
 
 DEBUG = True
 
-# 過去のデータから売り買い判定のみ表示
-SHOW_BUYSELLPOINT_FLG = True
+# 0: 通常モード
+# 1: 過去のデータから売り買い判定のみ表示
+# 2: 売買シミュレーション結果を表示
+MODE = 2
 
 URL = "https://api.bitbank.cc/v1"
 PUBLIC_URL = "https://public.bitbank.cc"
@@ -26,12 +28,12 @@ MA_short = 5 # 移動平均（短期）
 MA_long = 50 # 移動平均（長期）
 CANDLE_TYPE = '1hour' # データ取得間隔
 PAIR = 'qtum_jpy' # 対象通貨
-MA_times = 3 # コインを購入/売却金額する連続GC/DC回数
-BUY_PRICE = 1.0 # 購入金額(円)
-SELL_PRICE = 1.0 # 売却金額(円)
-RSI_SELL = 80.0 # 売りRSIボーダー
+MA_times = 6 # コインを購入/売却金額する連続GC/DC回数
+BUY_PRICE = 500.0 # 購入金額(円)
+SELL_PRICE = 500.0 # 売却金額(円)
+RSI_SELL = 70.0 # 売りRSIボーダー
 RSI_BUY = 100.0 - RSI_SELL # 買いRSIボーダー
-VOL_ORDER = 50000 # 取引する基準となる取引量(Volume)
+VOL_ORDER = 20000 # 取引する基準となる取引量(Volume)
 BUY = 1
 SELL = -1
 
@@ -218,7 +220,7 @@ def buyORsell(df, logic=0):
                 buysell = SELL
     else:
         logger.error("対応ロジックなし logic: " + logic)
-        
+
     return buysell
 
 def show_buysellpoint(df):
@@ -233,10 +235,44 @@ def show_buysellpoint(df):
             df.iat[i,8] = "BUY"
         elif buyORsell(tmp_df) == SELL:
             df.iat[i,8] = "SELL"
-    logger.info("\n" + str(df.tail(30)))
+    logger.info("\n" + str(df.tail(100)))
+
+def simulate(df):
+    """
+        過去データ(df)から実際に売買した場合の総資産や利益を表示
+    """
+    yen = 100000
+    coin = 100
+    init_asset  = 100000 + 100*df['Close'][0]
+    df['BUYSELL'] = 0
+    df['SimulateAsset'] = 0.0
+    df['Profit'] = 0.0
+    df['Coin'] = 0.0
+
+    for i in range(len(df)):
+        tmp_df = df.iloc[i:i+1]
+        coin_price = tmp_df['Close'][0]
+
+        if buyORsell(tmp_df) == BUY:
+            df.iat[i,8] = "BUY"
+            price = BUY_PRICE/coin_price
+            yen -= BUY_PRICE
+            coin += price
+
+        elif buyORsell(tmp_df) == SELL:
+            df.iat[i,8] = "SELL"
+            price = SELL_PRICE/coin_price
+            yen += SELL_PRICE
+            coin -= price
+
+        df.iat[i,9] = yen + coin*coin_price
+        df.iat[i,10] = df.iat[i,9] - init_asset
+        df.iat[i,11] = coin
+
+    logger.info("\n" + str(df.tail(100)))
 
 if __name__ == "__main__":
-    pd.set_option('display.max_rows', 30)
+    pd.set_option('display.max_rows', 100)
 
     date = datetime.now() - timedelta(days=1)
     df = get_ohlcv(date, MA_long*2, CANDLE_TYPE)
@@ -252,9 +288,11 @@ if __name__ == "__main__":
     # 対象通貨の現在の価格
     coin_price = df['Close'][-1]
 
-    if SHOW_BUYSELLPOINT_FLG:
+    if MODE == 1:
         show_buysellpoint(df)
-    else:
+    elif MODE == 2:
+        simulate(df)
+    elif MODE == 3:
         if buyORsell(df) == SELL:
             # ##################
             # 売　却
@@ -266,22 +304,3 @@ if __name__ == "__main__":
             # 購　入
             # ##################
             order(BUY, BUY_PRICE, coin_price)
-
-        # # MA_times回連続してGC/DCし、取引量もVOL_ORDER以上だった、コインを購入/売却する
-        # if is_gcdc(df, MA_times) and buysell_by_vol(df):
-        #     gcdc = "GC" if df['ma_diff'][-1] >= 0 else "DC"
-        #
-        #     coin_price = df['Close'][-1]
-        #     logger.debug("df['GCDC_times'][-1]: " + str(df['GCDC_times'][-1]) + " coin_price: " + str(coin_price))
-        #
-        #     # ##################
-        #     # 売　却
-        #     # ##################
-        #     if gcdc == "DC" and buysell_by_rsi(df) == SELL:
-        #         order(SELL, SELL_PRICE, coin_price)
-        #
-        #     # ##################
-        #     # 購　入
-        #     # ##################
-        #     if gcdc == "GC" and buysell_by_rsi(df) == BUY:
-        #         order(BUY, BUY_PRICE, coin_price)

@@ -226,3 +226,8 @@ def test_order_buy_error(mocker):
 def test_order_sell_error(mocker):
     mocker.patch.object(CryptService, 'post_order', return_value={'success': 0, 'data': 'モック'})
     assert order(SELL, 1.0, 100.0) == -1
+
+def test_simulate(get_madata_gcdc81_fixture):
+    df = get_madata_gcdc81_fixture['df']
+    print(df['Close'][0])
+    assert simulate(df)
