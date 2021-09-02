@@ -241,13 +241,13 @@ def simulate(df):
     """
         過去データ(df)から実際に売買した場合の総資産や利益を表示
     """
-    yen = 100000
-    coin = 100
+    yen = 100000 # 初期日本円
+    coin = 100 # 初期仮想通貨数
     init_asset  = 100000 + 100*df['Close'][0]
-    df['BUYSELL'] = 0
-    df['SimulateAsset'] = 0.0
-    df['Profit'] = 0.0
-    df['Coin'] = 0.0
+    df['BUYSELL'] = 0             # 売り買いの識別　index 8
+    df['SimulateAsset'] = 0.0     # シミュレーションしたときの総資産　index 9
+    df['Profit'] = 0.0            # シミュレーションしたときの利益（総資産ー初期資産）index 10
+    df['Coin'] = 0.0              # 所持仮想通貨数　index 11
 
     for i in range(len(df)):
         tmp_df = df.iloc[i:i+1]
@@ -265,10 +265,11 @@ def simulate(df):
             yen += SELL_PRICE
             coin -= price
 
-        df.iat[i,9] = yen + coin*coin_price
-        df.iat[i,10] = df.iat[i,9] - init_asset
-        df.iat[i,11] = coin
+        df.iat[i,9] = yen + coin*coin_price # SimulateAsset
+        df.iat[i,10] = df.iat[i,9] - init_asset # Profit
+        df.iat[i,11] = coin # Coin
 
+    # シミュレーション結果を表示
     logger.info("\n" + str(df.tail(100)))
 
 if __name__ == "__main__":
