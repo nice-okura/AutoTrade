@@ -14,7 +14,7 @@ class CryptService:
         return api_key_get(self.__url, request_path, [], self.__access_key, self.__secret_key)
 
     def get_ticker(self, pair):
-        request_path = "/"+ pair + "/ticker"
+        request_path = "/" + pair + "/ticker"
 
         return api_key_get(self.__public_url, request_path, [], self.__access_key, self.__secret_key)
 
@@ -50,5 +50,3 @@ class CryptService:
 
     def get_currency_summary(self):
         balance_list, total_assets, currency_list = self.get_currency_data()
-
-        

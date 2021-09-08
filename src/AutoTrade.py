@@ -21,32 +21,32 @@ URL = "https://api.bitbank.cc/v1"
 PUBLIC_URL = "https://public.bitbank.cc"
 
 # Config
-MA_short = 5 # 移動平均（短期）
-MA_long = 50 # 移動平均（長期）
-CANDLE_TYPE = '1hour' # データ取得間隔
-PAIR = 'qtum_jpy' # 対象通貨
-MA_times = 6 # コインを購入/売却金額する連続GC/DC回数
-BUY_PRICE = 400.0 # 購入金額(円)
-SELL_PRICE = 400.0 # 売却金額(円)
-RSI_SELL = 70.0 # 売りRSIボーダー
-RSI_BUY = 100.0 - RSI_SELL # 買いRSIボーダー
-VOL_ORDER = 20000 # 取引する基準となる取引量(Volume)
+MA_short = 5  # 移動平均（短期）
+MA_long = 50  # 移動平均（長期）
+CANDLE_TYPE = '1hour'  # データ取得間隔
+PAIR = 'qtum_jpy'  # 対象通貨
+MA_times = 6  # コインを購入/売却金額する連続GC/DC回数
+BUY_PRICE = 400.0  # 購入金額(円)
+SELL_PRICE = 400.0  # 売却金額(円)
+RSI_SELL = 70.0  # 売りRSIボーダー
+RSI_BUY = 100.0 - RSI_SELL  # 買いRSIボーダー
+VOL_ORDER = 20000  # 取引する基準となる取引量(Volume)
 BUY = 1
 SELL = -1
 WEIGHT_OF_PRICE = 0.05  # 連続MA回数から購入金額を決めるときの重み
 
 # 1. ロガーを取得する
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG) # 出力レベルを設定
+logger.setLevel(logging.DEBUG)  # 出力レベルを設定
 
 # 2. ハンドラーを生成する
 h = logging.StreamHandler()
-h.setLevel(logging.DEBUG) # 出力レベルを設定
+h.setLevel(logging.DEBUG)  # 出力レベルを設定
 h2 = logging.FileHandler('./AutoTrade.log')
 if DEBUG == True:
-    h2.setLevel(logging.DEBUG) # 出力レベルを設定
+    h2.setLevel(logging.DEBUG)  # 出力レベルを設定
 else:
-    h2.setLevel(logging.INFO) # 出力レベルを設定
+    h2.setLevel(logging.INFO)  # 出力レベルを設定
 
 # 3. フォーマッタを生成する
 fmt = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -314,38 +314,65 @@ def simulate(df, logic=0):
     return df
 
 
-if __name__ == "__main__":
-    argparser = ArgumentParser()
-    argparser.add_argument('-l')
-    argparser.add_argument('-s', help='Simulate mode.')
-    args = argparser.parse_args()
-
-    pd.set_option('display.max_rows', 100)
-
-    date = datetime.now() - timedelta(days=1)
-    if args.l is not None:
-        df = load_csv2pd(args.l)
-    else:
-        df = get_ohlcv(date, MA_long*2, CANDLE_TYPE)
-
+def set_ma_rsi(df):
+    """
+        移動平均（MA）とRSIを計算、DataFrameに追記し返却
+    """
     # 移動平均の差分と、連続GC/DC回数を取得
     df['ma_diff'], df['GCDC_times'] = get_madata(df)
 
     # RSIを取得
     df['rsi'] = get_rsi(df)
 
-    logger.info("\n" + str(df.tail(40)))
+    return df
+
+
+def set_parameter(ma_short=MA_short, ma_long=MA_long, ma_times=MA_times, vol_order=VOL_ORDER):
+    global MA_short
+    global MA_long
+    global MA_times
+    global VOL_ORDER
+
+    MA_short = ma_short
+    MA_long = ma_long
+    MA_times = ma_times
+    VOL_ORDER = vol_order
+
+
+if __name__ == "__main__":
+    # オプション引数
+    argparser = ArgumentParser()
+    argparser.add_argument('-l')
+    argparser.add_argument('-s', action='store_true', help='Simulate mode.')
+    args = argparser.parse_args()
+
+    # DataFrameの最大表示行数
+    pd.set_option('display.max_rows', 100)
+
+    if args.l is not None:
+        # CSVファイルからOHLCVデータを読み取り
+        df = load_csv2pd(args.l)
+    else:
+        # 前日までのデータを収集
+        date = datetime.now() - timedelta(days=1)
+        df = get_ohlcv(date, MA_long*2, CANDLE_TYPE)
+
+    # 移動平均(MA)とRSIを計算、設定
+    df = set_ma_rsi(df)
+
+    # logger.info("\n" + str(df.tail(40)))
 
     # 対象通貨の現在の価格
     coin_price = df['Close'][-1]
 
-    if MODE == 1:
-        show_buysellpoint(df)
-    elif MODE == 2:
-        sim_df = simulate(df, logic=1)
-        logger.info("\n" + str(sim_df.tail(100)))
-
-    elif MODE == 3:
+    if args.s is not None:
+        # シミュレーション
+        for ma_times in range(2, 32):
+            set_parameter(ma_times=ma_times)
+            sim_df = simulate(df, logic=1)
+            # logger.info("\n" + str(sim_df.tail(100)))
+            print(f"{ma_times} Profit:{sim_df['Profit'][-1]}")
+    else:
         if buyORsell(df) == SELL:
             # ##################
             # 売　却
