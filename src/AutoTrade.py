@@ -1,15 +1,12 @@
-import json
-import sys
 import numpy as np
 import math
-import time
 from datetime import datetime
 from datetime import timedelta
 import os
-import csv
 import pandas as pd
 import logging
 from CryptService import CryptService
+from argparse import ArgumentParser
 
 from pprint import pprint as pp
 
@@ -29,13 +26,14 @@ MA_long = 50 # 移動平均（長期）
 CANDLE_TYPE = '1hour' # データ取得間隔
 PAIR = 'qtum_jpy' # 対象通貨
 MA_times = 6 # コインを購入/売却金額する連続GC/DC回数
-BUY_PRICE = 500.0 # 購入金額(円)
-SELL_PRICE = 500.0 # 売却金額(円)
+BUY_PRICE = 400.0 # 購入金額(円)
+SELL_PRICE = 400.0 # 売却金額(円)
 RSI_SELL = 70.0 # 売りRSIボーダー
 RSI_BUY = 100.0 - RSI_SELL # 買いRSIボーダー
 VOL_ORDER = 20000 # 取引する基準となる取引量(Volume)
 BUY = 1
 SELL = -1
+WEIGHT_OF_PRICE = 0.05  # 連続MA回数から購入金額を決めるときの重み
 
 # 1. ロガーを取得する
 logger = logging.getLogger(__name__)
@@ -62,6 +60,7 @@ logger.addHandler(h)
 logger.addHandler(h2)
 
 cs = CryptService(URL, PUBLIC_URL, os.environ['API_KEY'], os.environ['API_SECRET'], "bitbank")
+
 
 def get_ohlcv(date, size, candle_type):
     """dateからsize単位時間分のOHLCVデータを取得する
@@ -105,6 +104,18 @@ def get_ohlcv(date, size, candle_type):
 
     return ohlcv_df
 
+
+def load_csv2pd(filename):
+    """CSVファイルからDataFrameを読み込み、返す
+
+    """
+    df = pd.read_csv(filename)
+    df = df.set_index('Date')
+    df = df.astype(float)
+
+    return df
+
+
 # 移動平均の差(ma_diff)と連続GC/DC回数を計算し、返却
 def get_madata(df):
     ma_short = df.rolling(MA_short).mean()
@@ -125,6 +136,7 @@ def get_madata(df):
 
     return ma_diff, times_list
 
+
 # RSIを計算
 def get_rsi(df):
     # RSI計算
@@ -139,9 +151,11 @@ def get_rsi(df):
 
     return rsi
 
+
 # 連続times x n回 DCまたはGCを継続しているか判定
 def is_gcdc(df, times):
     return df['GCDC_times'][-1] % times == 0
+
 
 # RSIをもとに売り(-1) or 買い(1) or ステイ(0)を判定
 def buysell_by_rsi(df):
@@ -154,9 +168,11 @@ def buysell_by_rsi(df):
 
     return buysell
 
+
 # Volumeをもとに取引するかしないを判定
 def buysell_by_vol(df):
     return df['Volume'][-1] >= VOL_ORDER
+
 
 def order(buysell, price_yen, coin_price):
     """
@@ -165,7 +181,7 @@ def order(buysell, price_yen, coin_price):
     price = price_yen/coin_price
     order_mode, order_str = ("buy", "購入") if buysell == BUY else ("sell", "売却")
 
-    if DEBUG == False:
+    if DEBUG is False:
         order_result = cs.post_order(PAIR, price, "", order_mode, "market")
     else:
         order_result = {'success': 0, 'data': "デバッグモード"}
@@ -183,6 +199,7 @@ def order(buysell, price_yen, coin_price):
         return -1
 
     return -1
+
 
 def buyORsell(df, logic=0):
     """売りか買いか判定
@@ -218,10 +235,17 @@ def buyORsell(df, logic=0):
                 buysell = BUY
             elif (is_gcdc(df, MA_times) and gcdc == "DC") or buysell_by_rsi(df) == SELL:
                 buysell = SELL
+    elif logic == 1:
+        if is_gcdc(df, MA_times) and gcdc == "GC":
+            buysell = BUY
+        elif is_gcdc(df, MA_times) and gcdc == "DC":
+            buysell = SELL
+
     else:
         logger.error("対応ロジックなし logic: " + logic)
 
     return buysell
+
 
 def show_buysellpoint(df):
     """
@@ -232,51 +256,77 @@ def show_buysellpoint(df):
     for i in range(len(df)):
         tmp_df = df.iloc[i:i+1]
         if buyORsell(tmp_df) == BUY:
-            df.iat[i,8] = "BUY"
+            df.iat[i, 8] = "BUY"
         elif buyORsell(tmp_df) == SELL:
-            df.iat[i,8] = "SELL"
+            df.iat[i, 8] = "SELL"
     logger.info("\n" + str(df.tail(100)))
 
-def simulate(df):
+
+def get_BUYSELLprice(yen_price, cryptcoin_price, mode=0, oneline_df=None):
+    BUYSELLprice = 0.0
+
+    if mode == 0:
+        BUYSELLprice = yen_price / cryptcoin_price
+
+    elif mode == 1 and oneline_df is not None:
+        BUYSELLprice = yen_price * oneline_df['GCDC_times'][0] * WEIGHT_OF_PRICE
+
+    return BUYSELLprice
+
+
+def simulate(df, logic=0):
     """
-        過去データ(df)から実際に売買した場合の総資産や利益を表示
+        過去データ(df)から実際に売買した場合の総資産や利益を計算し、dfに追加して返す
+
+
     """
-    yen = 100000 # 初期日本円
-    coin = 100 # 初期仮想通貨数
-    init_asset  = 100000 + 100*df['Close'][0]
+    yen = 100000  # 初期日本円
+    coin = 40  # 初期仮想通貨数
+    init_asset = 100000 + coin * df['Close'][0]
     df['BUYSELL'] = 0             # 売り買いの識別　index 8
     df['SimulateAsset'] = 0.0     # シミュレーションしたときの総資産　index 9
     df['Profit'] = 0.0            # シミュレーションしたときの利益（総資産ー初期資産）index 10
     df['Coin'] = 0.0              # 所持仮想通貨数　index 11
+    mode = 1
 
     for i in range(len(df)):
         tmp_df = df.iloc[i:i+1]
-        coin_price = tmp_df['Close'][0]
+        coin_price = tmp_df['Close'][0]  # 購入する仮想通貨の現在の価格
 
-        if buyORsell(tmp_df) == BUY:
-            df.iat[i,8] = "BUY"
-            price = BUY_PRICE/coin_price
-            yen -= BUY_PRICE
-            coin += price
+        if buyORsell(tmp_df, logic) == BUY:
+            df.iat[i, 8] = "BUY"
+            buy_price = get_BUYSELLprice(BUY_PRICE, coin_price, mode, tmp_df)  # 購入する仮想通貨の枚数
+            # price = BUY_PRICE/coin_price
+            yen -= buy_price
+            coin += buy_price/coin_price
 
-        elif buyORsell(tmp_df) == SELL:
-            df.iat[i,8] = "SELL"
-            price = SELL_PRICE/coin_price
-            yen += SELL_PRICE
-            coin -= price
+        elif buyORsell(tmp_df, logic) == SELL:
+            df.iat[i, 8] = "SELL"
+            sell_price = get_BUYSELLprice(SELL_PRICE, coin_price, mode, tmp_df)  # 購入する仮想通貨の枚数
+            # price = SELL_PRICE/coin_price  # 購入する仮想通貨の枚数
+            yen += sell_price
+            coin -= sell_price/coin_price
 
-        df.iat[i,9] = yen + coin*coin_price # SimulateAsset
-        df.iat[i,10] = df.iat[i,9] - init_asset # Profit
-        df.iat[i,11] = coin # Coin
+        df.iat[i, 9] = yen + coin*coin_price  # SimulateAsset
+        df.iat[i, 10] = df.iat[i, 9] - init_asset  # Profit
+        df.iat[i, 11] = coin  # Coin
 
-    # シミュレーション結果を表示
-    logger.info("\n" + str(df.tail(100)))
+    return df
+
 
 if __name__ == "__main__":
+    argparser = ArgumentParser()
+    argparser.add_argument('-l')
+    argparser.add_argument('-s', help='Simulate mode.')
+    args = argparser.parse_args()
+
     pd.set_option('display.max_rows', 100)
 
     date = datetime.now() - timedelta(days=1)
-    df = get_ohlcv(date, MA_long*2, CANDLE_TYPE)
+    if args.l is not None:
+        df = load_csv2pd(args.l)
+    else:
+        df = get_ohlcv(date, MA_long*2, CANDLE_TYPE)
 
     # 移動平均の差分と、連続GC/DC回数を取得
     df['ma_diff'], df['GCDC_times'] = get_madata(df)
@@ -292,7 +342,9 @@ if __name__ == "__main__":
     if MODE == 1:
         show_buysellpoint(df)
     elif MODE == 2:
-        simulate(df)
+        sim_df = simulate(df, logic=1)
+        logger.info("\n" + str(sim_df.tail(100)))
+
     elif MODE == 3:
         if buyORsell(df) == SELL:
             # ##################

@@ -1,6 +1,6 @@
 from AutoTrade import *
 import pytest
-from datetime import datetime
+from datetime import datetime, timedelta
 import pandas as pd
 from CryptService import CryptService
 
@@ -11,16 +11,20 @@ def load_csv2pd(filename):
 
     return df
 
+
 """
   *************************
   ***** F I X T U R E *****
   *************************
 """
+
+
 @pytest.fixture(scope='session', autouse=True)
 def session_fixture():
     print("テスト全体の前処理")
     yield
     print("テスト全体の後処理")
+
 
 @pytest.fixture(scope='module', autouse=True)
 def module_fixture():
@@ -42,10 +46,12 @@ def function_fixture():
     yield
     print("関数の後処理")
 
+
 @pytest.fixture(scope='function', autouse=True)
 def get_madata_times1_fixture():
     test_df = load_csv2pd('tests/test_df_times1.csv')
     yield({'df': test_df})
+
 
 @pytest.fixture(scope='function', autouse=True)
 def get_madata_times81_fixture():
@@ -53,10 +59,12 @@ def get_madata_times81_fixture():
     test_df = load_csv2pd('tests/test_df_times81.csv')
     yield({'df': test_df})
 
+
 @pytest.fixture(scope='function', autouse=True)
 def get_madata_gcdc1_fixture():
     test_df = load_csv2pd('tests/test_df_gcdc1.csv')
     yield({'df': test_df})
+
 
 @pytest.fixture(scope='function', autouse=True)
 def get_madata_gcdc81_fixture():
@@ -65,12 +73,14 @@ def get_madata_gcdc81_fixture():
 
     yield({'df': test_df})
 
+
 @pytest.fixture(scope='function', autouse=True)
 def get_madata_rsiover80_fixture():
     print("### get_madata_rsiover80_fixture ###")
     test_df = load_csv2pd('tests/test_df_rsiover80.csv')
 
     yield({'df': test_df})
+
 
 @pytest.fixture(scope='function', autouse=True)
 def get_madata_rsiunder20_fixture():
@@ -79,6 +89,12 @@ def get_madata_rsiunder20_fixture():
 
     yield({'df': test_df})
 
+@pytest.fixture(scope='function', autouse=True)
+def get_data_20210401_0404_fixture():
+    print("### get_data_20210401_0404_fixture ###")
+    test_df = load_csv2pd('tests/data_20210401-0404.csv')
+
+    yield({'df': test_df})
 """
 
   *******************
@@ -86,27 +102,32 @@ def get_madata_rsiunder20_fixture():
   *******************
 
 """
+
+
 def test_get_ohlcv_5min():
-    date = datetime.now()
+    date = datetime.now() - timedelta(days=1)
     size = 1000
     df = get_ohlcv(date, size, '5min')
 
     assert df.size >= size
 
+
 def test_get_ohlcv_1hour():
-    date = datetime.now()
+    date = datetime.now() - timedelta(days=1)
     size = 100
     df = get_ohlcv(date, size, '1hour')
 
     assert df.size >= size
 
+
 # 4hourには対応していないので、例外が発生します
 def test_get_ohlcv_4hour():
-    date = datetime.now()
+    date = datetime.now() - timedelta(days=1)
     size = 100
 
     with pytest.raises(Exception):
         df = get_ohlcv(date, size, '4hour')
+
 
 def test_get_madata_times1(get_madata_times1_fixture):
     """
@@ -115,7 +136,8 @@ def test_get_madata_times1(get_madata_times1_fixture):
     df = get_madata_times1_fixture['df']
     ma_diff, times_list = get_madata(df)
 
-    assert times_list[-1] == 1
+    assert times_list[-1] == 11
+
 
 def test_get_madata_times81(get_madata_times81_fixture):
     """
@@ -124,7 +146,7 @@ def test_get_madata_times81(get_madata_times81_fixture):
     df = get_madata_times81_fixture['df']
     ma_diff, times_list = get_madata(df)
 
-    assert times_list[-1] == 81
+    assert times_list[-1] == 5
 
 def test_get_madata_madiff(get_madata_times81_fixture):
     """
@@ -135,7 +157,7 @@ def test_get_madata_madiff(get_madata_times81_fixture):
 
     ma_diff, times_list = get_madata(df)
 
-    assert ma_diff.iloc()[-1] == -7.083140000000185
+    assert ma_diff.iloc()[-1] == 50.50217999999984
 
 def test_get_rsi_01(get_madata_times81_fixture):
     """
@@ -212,22 +234,59 @@ def test_buysell_by_vol(get_madata_gcdc81_fixture):
     assert buysell_by_vol(df)
 
 def test_order_buy(mocker):
+    mocker.patch('AutoTrade.DEBUG', False)
     mocker.patch.object(CryptService, 'post_order', return_value={'success': 1, 'data': {'start_amount': 100.0}})
     assert order(BUY, 1.0, 100.0) == 100.0
 
 def test_order_sell(mocker):
+    mocker.patch('AutoTrade.DEBUG', False)
     mocker.patch.object(CryptService, 'post_order', return_value={'success': 1, 'data': {'start_amount': 100.0}})
     assert order(SELL, 1.0, 100.0) == 100.0
+
 
 def test_order_buy_error(mocker):
     mocker.patch.object(CryptService, 'post_order', return_value={'success': 0, 'data': 'モック'})
     assert order(BUY, 1.0, 100.0) == -1
 
+
 def test_order_sell_error(mocker):
     mocker.patch.object(CryptService, 'post_order', return_value={'success': 0, 'data': 'モック'})
     assert order(SELL, 1.0, 100.0) == -1
 
-def test_simulate(get_madata_gcdc81_fixture):
+
+def test_simulate_20210401_0404_logic0(get_data_20210401_0404_fixture):
+    logic = 0
+    df = get_data_20210401_0404_fixture['df']
+    df['ma_diff'], df['GCDC_times'] = get_madata(df)
+    df['rsi'] = get_rsi(df)
+    sim_df = simulate(df, logic)
+
+    assert sim_df['Coin'][-1] == 40.41967636253354
+    assert sim_df['Profit'][-1] == 1482.3699434891168
+    assert sim_df['SimulateAsset'][-1] == 146898.52994348912
+
+def test_simulate_20210401_0404_logic1(get_data_20210401_0404_fixture):
+    logic = 1
+    df = get_data_20210401_0404_fixture['df']
+    df['ma_diff'], df['GCDC_times'] = get_madata(df)
+    df['rsi'] = get_rsi(df)
+    sim_df = simulate(df, logic)
+
+    assert sim_df['Coin'][-1] == 40.5112654518479
+    assert sim_df['Profit'][-1] == 1469.7274683652795
+    assert sim_df['SimulateAsset'][-1] == 146885.88746836528
+
+def test_get_BUYSELLprice_mode0():
+    yen_price = 100
+    cryptcoin_price = 20
+    mode = 0
+    assert get_BUYSELLprice(yen_price, cryptcoin_price, mode) == 5
+
+
+def test_get_BUYSELLprice_mode1(get_madata_gcdc81_fixture):
     df = get_madata_gcdc81_fixture['df']
-    print(df['Close'][0])
-    assert simulate(df)
+    oneline_df = df.iloc[-1:]
+    yen_price = 100
+    cryptcoin_price = 20
+    mode = 1
+    assert get_BUYSELLprice(yen_price, cryptcoin_price, mode, oneline_df) == 405
