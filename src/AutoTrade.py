@@ -28,7 +28,7 @@ PAIR = 'qtum_jpy'  # 対象通貨
 MA_times = 6  # コインを購入/売却金額する連続GC/DC回数
 BUY_PRICE = 400.0  # 購入金額(円)
 SELL_PRICE = 400.0  # 売却金額(円)
-RSI_SELL = 70.0  # 売りRSIボーダー
+RSI_SELL = 85.0  # 売りRSIボーダー
 RSI_BUY = 100.0 - RSI_SELL  # 買いRSIボーダー
 VOL_ORDER = 20000  # 取引する基準となる取引量(Volume)
 BUY = 1
@@ -236,10 +236,33 @@ def buyORsell(df, logic=0):
             elif (is_gcdc(df, MA_times) and gcdc == "DC") or buysell_by_rsi(df) == SELL:
                 buysell = SELL
     elif logic == 1:
+        """
+        売り買いロジック③：
+        　MAのみで判断。連続n回GCなら「買い」、連続n回DCなら「売り」
+        """
         if is_gcdc(df, MA_times) and gcdc == "GC":
             buysell = BUY
         elif is_gcdc(df, MA_times) and gcdc == "DC":
             buysell = SELL
+    elif logic == 2:
+        """
+        売り買いロジック⑪：
+        Volumeがxxx以上でないと売買しない
+        　優先度１．RSIで判断
+        　　RSI売られすぎのときに「買い」、買われすぎのときに「売り」
+        　優先度２．移動平均で判断
+        　　連続n回GCなら「買い」、連続n回DCなら「売り」
+        """
+        if buysell_by_vol(df):
+            if buysell_by_rsi(df) == BUY:
+                buysell = BUY
+            elif buysell_by_rsi == SELL:
+                buysell = SELL
+            else:
+                if is_gcdc(df, MA_times) and gcdc == "GC":
+                    buysell = BUY
+                elif is_gcdc(df, MA_times) and gcdc == "DC":
+                    buysell = SELL
 
     else:
         logger.error("対応ロジックなし logic: " + logic)
@@ -367,11 +390,11 @@ if __name__ == "__main__":
 
     if args.s is not None:
         # シミュレーション
-        for ma_times in range(2, 32):
-            set_parameter(ma_times=ma_times)
-            sim_df = simulate(df, logic=1)
-            # logger.info("\n" + str(sim_df.tail(100)))
-            print(f"{ma_times} Profit:{sim_df['Profit'][-1]}")
+        # set_parameter(ma_times=ma_times)
+        sim_df = simulate(df, logic=2)
+        logger.info("\n" + str(sim_df.head(300)))
+        print(f"Profit:{sim_df['Profit'][-1]}")
+
     else:
         if buyORsell(df) == SELL:
             # ##################
