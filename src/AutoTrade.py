@@ -315,12 +315,16 @@ def simulate(df, logic=0, init_yen=100000, init_coin=100, price_decision_logic=0
     df['Profit'] = 0.0            # シミュレーションしたときの利益（総資産ー初期資産）index 10
     df['Coin'] = 0.0              # 所持仮想通貨数　index 11
 
-    for i in range(len(df)):
-        tmp_df = df.iloc[i:i+1]
+    for i, r in df.iterrows():
+        tmp_df = pd.DataFrame([r])
+        # print(tmp_df)
+        # tmp_df = tmp_df.set_index('Date')
+
         coin_price = tmp_df['Close'][0]  # 購入する仮想通貨の現在の価格
 
         if buyORsell(tmp_df, logic) == BUY:
-            df.iat[i, 8] = BUY
+            df.at[i, 'BUYSELL'] = BUY
+
             buy_price = get_BUYSELLprice(BUY_PRICE, coin_price, price_decision_logic, tmp_df)  # 購入する仮想通貨の枚数
             # price = BUY_PRICE/coin_price
             yen -= buy_price
@@ -328,16 +332,16 @@ def simulate(df, logic=0, init_yen=100000, init_coin=100, price_decision_logic=0
             logger.debug(f'[BUY]{tmp_df.index.strftime("%Y/%m/%d %H:%M")[0]}: BUY_PRICE: {buy_price}')
 
         elif buyORsell(tmp_df, logic) == SELL:
-            df.iat[i, 8] = SELL
+            df.at[i, 'BUYSELL'] = SELL
             sell_price = get_BUYSELLprice(SELL_PRICE, coin_price, price_decision_logic, tmp_df)  # 購入する仮想通貨の枚数
             # price = SELL_PRICE/coin_price  # 購入する仮想通貨の枚数
             yen += sell_price
             coin -= sell_price/coin_price
             logger.debug(f'[SELL]{tmp_df.index.strftime("%Y/%m/%d %H:%M")[0]}: SELL_PRICE: {sell_price}')
 
-        df.iat[i, 9] = yen + coin*coin_price  # SimulateAsset
-        df.iat[i, 10] = df.iat[i, 9] - init_asset  # Profit
-        df.iat[i, 11] = coin  # Coin
+        df.at[i, 'SimulateAsset'] = yen + coin*coin_price  # SimulateAsset
+        df.at[i, 'Profit'] = df.at[i, 'SimulateAsset'] - init_asset  # Profit
+        df.at[i, 'Coin'] = coin  # Coin
 
     return df
 
@@ -409,10 +413,10 @@ def main():
     if args.s is not None:
         # シミュレーション
         # set_parameter(ma_times=ma_times)
-        sim_df = simulate(df, logic=1)
+        sim_df = simulate(df, logic=1, init_yen=100000, init_coin=1000, price_decision_logic=1)
         # logger.info("\n" + str(sim_df.tail(300)))
         print(f"Profit:{sim_df['Profit'][-1]}")
-        sim_df.to_csv("sampledata_1000days_result.csv")
+        # sim_df.to_csv("sampledata_1000days_result.csv")
         save_gragh(sim_df, "simulate00.png")
     else:
         if buyORsell(df) == SELL:

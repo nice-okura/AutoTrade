@@ -281,7 +281,7 @@ def test_simulate_20210401_0404_logic0(get_data_20210401_0404_fixture):
     df = get_data_20210401_0404_fixture['df']
     df['ma_diff'], df['GCDC_times'] = get_madata(df)
     df['rsi'] = get_rsi(df)
-    sim_df = simulate(df, logic)
+    sim_df = simulate(df, logic, init_yen=100000, init_coin=100, price_decision_logic=0)
 
     assert sim_df['Coin'][-1] == 100.67201231804299
     assert sim_df['Profit'][-1] == 3663.809318778862
@@ -295,9 +295,9 @@ def test_simulate_20210401_0404_logic1(get_data_20210401_0404_fixture):
     df['rsi'] = get_rsi(df)
     sim_df = simulate(df, logic, init_yen=100000, init_coin=100, price_decision_logic=0)
 
-    assert sim_df['Coin'][-1] == 40.5112654518479
-    assert sim_df['Profit'][-1] == 1469.7274683652795
-    assert sim_df['SimulateAsset'][-1] == 146885.88746836528
+    assert sim_df['Coin'][-1] == 100.67201231804299
+    assert sim_df['Profit'][-1] == 3663.809318778862
+    assert sim_df['SimulateAsset'][-1] == 217204.20931877886
 
 def test_get_BUYSELLprice_mode0():
     yen_price = 100
