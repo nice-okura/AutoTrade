@@ -7,15 +7,10 @@ import pandas as pd
 import logging
 from CryptService import CryptService
 from argparse import ArgumentParser
-
+import matplotlib.pyplot as plt
 from pprint import pprint as pp
 
 DEBUG = True
-
-# 0: 通常モード
-# 1: 過去のデータから売り買い判定のみ表示
-# 2: 売買シミュレーション結果を表示
-MODE = 2
 
 URL = "https://api.bitbank.cc/v1"
 PUBLIC_URL = "https://public.bitbank.cc"
@@ -33,7 +28,7 @@ RSI_BUY = 100.0 - RSI_SELL  # 買いRSIボーダー
 VOL_ORDER = 20000  # 取引する基準となる取引量(Volume)
 BUY = 1
 SELL = -1
-WEIGHT_OF_PRICE = 0.05  # 連続MA回数から購入金額を決めるときの重み
+WEIGHT_OF_PRICE = 0.2  # 連続MA回数から購入金額を決めるときの重み
 
 # 1. ロガーを取得する
 logger = logging.getLogger(__name__)
@@ -109,12 +104,11 @@ def load_csv2pd(filename):
     """CSVファイルからDataFrameを読み込み、返す
 
     """
-    df = pd.read_csv(filename)
+    df = pd.read_csv(filename, parse_dates=[0])
     df = df.set_index('Date')
     df = df.astype(float)
 
     return df
-
 
 # 移動平均の差(ma_diff)と連続GC/DC回数を計算し、返却
 def get_madata(df):
@@ -263,7 +257,8 @@ def buyORsell(df, logic=0):
                     buysell = BUY
                 elif is_gcdc(df, MA_times) and gcdc == "DC":
                     buysell = SELL
-
+    elif logic == 3:
+        pass
     else:
         logger.error("対応ロジックなし logic: " + logic)
 
@@ -285,50 +280,60 @@ def show_buysellpoint(df):
     logger.info("\n" + str(df.tail(100)))
 
 
-def get_BUYSELLprice(yen_price, cryptcoin_price, mode=0, oneline_df=None):
+def get_BUYSELLprice(yen_price, coin_price, mode=0, oneline_df=None):
     BUYSELLprice = 0.0
 
     if mode == 0:
-        BUYSELLprice = yen_price / cryptcoin_price
+        BUYSELLprice = yen_price
 
     elif mode == 1 and oneline_df is not None:
         BUYSELLprice = yen_price * oneline_df['GCDC_times'][0] * WEIGHT_OF_PRICE
+        # BUYSELLprice = yen_price * np.log10(oneline_df['GCDC_times'][0])
 
     return BUYSELLprice
 
 
-def simulate(df, logic=0):
+def simulate(df, logic=0, init_yen=100000, init_coin=100, price_decision_logic=0):
     """
         過去データ(df)から実際に売買した場合の総資産や利益を計算し、dfに追加して返す
 
+    Parameters
+    ----------
+    logic : int
+        0 : デフォルトロジック
+        1 : ・・・
+    init_yen : int 初期日本円
+    init_coin : int 初期仮想通貨数
+    price_decision_logic : int 売買決定決定ロジック
 
     """
-    yen = 100000  # 初期日本円
-    coin = 40  # 初期仮想通貨数
-    init_asset = 100000 + coin * df['Close'][0]
+    yen = init_yen  # 初期日本円
+    coin = init_coin  # 初期仮想通貨数
+    init_asset = init_yen + coin * df['Close'][0]
     df['BUYSELL'] = 0             # 売り買いの識別　index 8
     df['SimulateAsset'] = 0.0     # シミュレーションしたときの総資産　index 9
     df['Profit'] = 0.0            # シミュレーションしたときの利益（総資産ー初期資産）index 10
     df['Coin'] = 0.0              # 所持仮想通貨数　index 11
-    mode = 1
 
     for i in range(len(df)):
         tmp_df = df.iloc[i:i+1]
         coin_price = tmp_df['Close'][0]  # 購入する仮想通貨の現在の価格
 
         if buyORsell(tmp_df, logic) == BUY:
-            df.iat[i, 8] = "BUY"
-            buy_price = get_BUYSELLprice(BUY_PRICE, coin_price, mode, tmp_df)  # 購入する仮想通貨の枚数
+            df.iat[i, 8] = BUY
+            buy_price = get_BUYSELLprice(BUY_PRICE, coin_price, price_decision_logic, tmp_df)  # 購入する仮想通貨の枚数
             # price = BUY_PRICE/coin_price
             yen -= buy_price
             coin += buy_price/coin_price
+            logger.debug(f'[BUY]{tmp_df.index.strftime("%Y/%m/%d %H:%M")[0]}: BUY_PRICE: {buy_price}')
 
         elif buyORsell(tmp_df, logic) == SELL:
-            df.iat[i, 8] = "SELL"
-            sell_price = get_BUYSELLprice(SELL_PRICE, coin_price, mode, tmp_df)  # 購入する仮想通貨の枚数
+            df.iat[i, 8] = SELL
+            sell_price = get_BUYSELLprice(SELL_PRICE, coin_price, price_decision_logic, tmp_df)  # 購入する仮想通貨の枚数
             # price = SELL_PRICE/coin_price  # 購入する仮想通貨の枚数
             yen += sell_price
             coin -= sell_price/coin_price
+            logger.debug(f'[SELL]{tmp_df.index.strftime("%Y/%m/%d %H:%M")[0]}: SELL_PRICE: {sell_price}')
 
         df.iat[i, 9] = yen + coin*coin_price  # SimulateAsset
         df.iat[i, 10] = df.iat[i, 9] - init_asset  # Profit
@@ -349,6 +354,20 @@ def set_ma_rsi(df):
 
     return df
 
+def save_gragh(df, filename):
+    plt.subplot(211)
+    plt.plot(df.index, df["Profit"])
+    plt.title("Profit Graph")
+    plt.xlabel("Date")
+    plt.ylabel("Profit")
+
+    plt.subplot(212)
+    plt.plot(df.index, df["Close"])
+    plt.title("Price Graph")
+    plt.xlabel("Date")
+    plt.ylabel("Price")
+
+    plt.savefig(filename, format="png")
 
 def set_parameter(ma_short=MA_short, ma_long=MA_long, ma_times=MA_times, vol_order=VOL_ORDER):
     global MA_short
@@ -361,8 +380,7 @@ def set_parameter(ma_short=MA_short, ma_long=MA_long, ma_times=MA_times, vol_ord
     MA_times = ma_times
     VOL_ORDER = vol_order
 
-
-if __name__ == "__main__":
+def main():
     # オプション引数
     argparser = ArgumentParser()
     argparser.add_argument('-l')
@@ -382,7 +400,7 @@ if __name__ == "__main__":
 
     # 移動平均(MA)とRSIを計算、設定
     df = set_ma_rsi(df)
-
+    # df.to_csv("sampledata_1000days.csv")
     # logger.info("\n" + str(df.tail(40)))
 
     # 対象通貨の現在の価格
@@ -391,10 +409,11 @@ if __name__ == "__main__":
     if args.s is not None:
         # シミュレーション
         # set_parameter(ma_times=ma_times)
-        sim_df = simulate(df, logic=2)
-        logger.info("\n" + str(sim_df.head(300)))
+        sim_df = simulate(df, logic=1)
+        # logger.info("\n" + str(sim_df.tail(300)))
         print(f"Profit:{sim_df['Profit'][-1]}")
-
+        sim_df.to_csv("sampledata_1000days_result.csv")
+        save_gragh(sim_df, "simulate00.png")
     else:
         if buyORsell(df) == SELL:
             # ##################
@@ -407,3 +426,6 @@ if __name__ == "__main__":
             # 購　入
             # ##################
             order(BUY, BUY_PRICE, coin_price)
+
+if __name__ == "__main__":
+    main()

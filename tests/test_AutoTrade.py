@@ -5,7 +5,7 @@ import pandas as pd
 from CryptService import CryptService
 
 def load_csv2pd(filename):
-    df = pd.read_csv(filename)
+    df = pd.read_csv(filename, parse_dates=[0])
     df = df.set_index('Date')
     df = df.astype(float)
 
@@ -22,6 +22,20 @@ def load_csv2pd(filename):
 @pytest.fixture(scope='session', autouse=True)
 def session_fixture():
     print("テスト全体の前処理")
+    MA_short = 5  # 移動平均（短期）
+    MA_long = 50  # 移動平均（長期）
+    CANDLE_TYPE = '1hour'  # データ取得間隔
+    PAIR = 'qtum_jpy'  # 対象通貨
+    MA_times = 12  # コインを購入/売却金額する連続GC/DC回数
+    BUY_PRICE = 400.0  # 購入金額(円)
+    SELL_PRICE = 400.0  # 売却金額(円)
+    RSI_SELL = 85.0  # 売りRSIボーダー
+    RSI_BUY = 100.0 - RSI_SELL  # 買いRSIボーダー
+    VOL_ORDER = 20000  # 取引する基準となる取引量(Volume)
+    BUY = 1
+    SELL = -1
+    WEIGHT_OF_PRICE = 0.2  # 連続MA回数から購入金額を決めるときの重み
+
     yield
     print("テスト全体の後処理")
 
@@ -95,6 +109,14 @@ def get_data_20210401_0404_fixture():
     test_df = load_csv2pd('tests/data_20210401-0404.csv')
 
     yield({'df': test_df})
+
+@pytest.fixture(scope='function', autouse=True)
+def get_test_df_result_fixture():
+    print("### get_test_df_result_fixture ###")
+    test_df = load_csv2pd('tests/test_df_result.csv')
+
+    yield({'df': test_df})
+
 """
 
   *******************
@@ -261,16 +283,17 @@ def test_simulate_20210401_0404_logic0(get_data_20210401_0404_fixture):
     df['rsi'] = get_rsi(df)
     sim_df = simulate(df, logic)
 
-    assert sim_df['Coin'][-1] == 40.41967636253354
-    assert sim_df['Profit'][-1] == 1482.3699434891168
-    assert sim_df['SimulateAsset'][-1] == 146898.52994348912
+    assert sim_df['Coin'][-1] == 100.67201231804299
+    assert sim_df['Profit'][-1] == 3663.809318778862
+    assert sim_df['SimulateAsset'][-1] == 217204.20931877886
+
 
 def test_simulate_20210401_0404_logic1(get_data_20210401_0404_fixture):
     logic = 1
     df = get_data_20210401_0404_fixture['df']
     df['ma_diff'], df['GCDC_times'] = get_madata(df)
     df['rsi'] = get_rsi(df)
-    sim_df = simulate(df, logic)
+    sim_df = simulate(df, logic, init_yen=100000, init_coin=100, price_decision_logic=0)
 
     assert sim_df['Coin'][-1] == 40.5112654518479
     assert sim_df['Profit'][-1] == 1469.7274683652795
@@ -278,9 +301,9 @@ def test_simulate_20210401_0404_logic1(get_data_20210401_0404_fixture):
 
 def test_get_BUYSELLprice_mode0():
     yen_price = 100
-    cryptcoin_price = 20
+    coin_price = 20
     mode = 0
-    assert get_BUYSELLprice(yen_price, cryptcoin_price, mode) == 5
+    assert get_BUYSELLprice(yen_price, coin_price, mode) == 100
 
 
 def test_get_BUYSELLprice_mode1(get_madata_gcdc81_fixture):
@@ -290,3 +313,7 @@ def test_get_BUYSELLprice_mode1(get_madata_gcdc81_fixture):
     cryptcoin_price = 20
     mode = 1
     assert get_BUYSELLprice(yen_price, cryptcoin_price, mode, oneline_df) == 405
+
+def test_save_graph(get_test_df_result_fixture):
+    df = get_test_df_result_fixture['df']
+    save_gragh(df, "test_df_result.png")
