@@ -21,7 +21,7 @@ MA_short = 5  # 移動平均（短期）
 MA_long = 50  # 移動平均（長期）
 CANDLE_TYPE = '1hour'  # データ取得間隔
 PAIR = 'qtum_jpy'  # 対象通貨
-MA_times = 6  # コインを購入/売却金額する連続GC/DC回数
+MA_times = 12  # コインを購入/売却金額する連続GC/DC回数
 BUY_PRICE = 400.0  # 購入金額(円)
 SELL_PRICE = 400.0  # 売却金額(円)
 RSI_SELL = 85.0  # 売りRSIボーダー
@@ -29,7 +29,7 @@ RSI_BUY = 100.0 - RSI_SELL  # 買いRSIボーダー
 VOL_ORDER = 20000  # 取引する基準となる取引量(Volume)
 BUY = 1
 SELL = -1
-WEIGHT_OF_PRICE = 0.2  # 連続MA回数から購入金額を決めるときの重み
+WEIGHT_OF_PRICE = 0.05  # 連続MA回数から購入金額を決めるときの重み
 
 # 1. ロガーを取得する
 logger = logging.getLogger(__name__)
@@ -73,7 +73,7 @@ def calc_features(df):
     df['BBANDS_lowerband'] -= hilo
     # df['DEMA'] = talib.DEMA(close, timeperiod=30) - hilo
     # df['EMA'] = talib.EMA(close, timeperiod=30) - hilo
-    df['HT_TRENDLINE'] = talib.HT_TRENDLINE(close) - hilo
+    # df['HT_TRENDLINE'] = talib.HT_TRENDLINE(close) - hilo
     # df['KAMA'] = talib.KAMA(close, timeperiod=30) - hilo
     df['MA_SHORT'] = talib.MA(close, timeperiod=MA_short, matype=0) - hilo
     df['MA_LONG'] = talib.MA(close, timeperiod=MA_long, matype=0) - hilo
@@ -101,27 +101,27 @@ def calc_features(df):
     # df['PLUS_DI'] = talib.PLUS_DI(high, low, close, timeperiod=14)
     # df['PLUS_DM'] = talib.PLUS_DM(high, low, timeperiod=14)
     df['RSI'] = talib.RSI(close, timeperiod=14)
-    df['STOCH_slowk'], df['STOCH_slowd'] = talib.STOCH(high, low, close, fastk_period=5, slowk_period=3, slowk_matype=0, slowd_period=3, slowd_matype=0)
-    df['STOCHF_fastk'], df['STOCHF_fastd'] = talib.STOCHF(high, low, close, fastk_period=5, fastd_period=3, fastd_matype=0)
-    df['STOCHRSI_fastk'], df['STOCHRSI_fastd'] = talib.STOCHRSI(close, timeperiod=14, fastk_period=5, fastd_period=3, fastd_matype=0)
+    # df['STOCH_slowk'], df['STOCH_slowd'] = talib.STOCH(high, low, close, fastk_period=5, slowk_period=3, slowk_matype=0, slowd_period=3, slowd_matype=0)
+    # df['STOCHF_fastk'], df['STOCHF_fastd'] = talib.STOCHF(high, low, close, fastk_period=5, fastd_period=3, fastd_matype=0)
+    # df['STOCHRSI_fastk'], df['STOCHRSI_fastd'] = talib.STOCHRSI(close, timeperiod=14, fastk_period=5, fastd_period=3, fastd_matype=0)
     # df['TRIX'] = talib.TRIX(close, timeperiod=30)
     # df['ULTOSC'] = talib.ULTOSC(high, low, close, timeperiod1=7, timeperiod2=14, timeperiod3=28)
     # df['WILLR'] = talib.WILLR(high, low, close, timeperiod=14)
 
     # df['AD'] = talib.AD(high, low, close, volume)
     # df['ADOSC'] = talib.ADOSC(high, low, close, volume, fastperiod=3, slowperiod=10)
-    # df['OBV'] = talib.OBV(close, volume)
+    df['OBV'] = talib.OBV(close, volume)
 
     df['ATR'] = talib.ATR(high, low, close, timeperiod=14)
     # df['NATR'] = talib.NATR(high, low, close, timeperiod=14)
     # df['TRANGE'] = talib.TRANGE(high, low, close)
-
+    #
     # df['HT_DCPERIOD'] = talib.HT_DCPERIOD(close)
     # df['HT_DCPHASE'] = talib.HT_DCPHASE(close)
     # df['HT_PHASOR_inphase'], df['HT_PHASOR_quadrature'] = talib.HT_PHASOR(close)
     # df['HT_SINE_sine'], df['HT_SINE_leadsine'] = talib.HT_SINE(close)
     # df['HT_TRENDMODE'] = talib.HT_TRENDMODE(close)
-
+    #
     # df['BETA'] = talib.BETA(high, low, timeperiod=5)
     # df['CORREL'] = talib.CORREL(high, low, timeperiod=30)
     # df['LINEARREG'] = talib.LINEARREG(close, timeperiod=14) - close
@@ -129,6 +129,7 @@ def calc_features(df):
     # df['LINEARREG_INTERCEPT'] = talib.LINEARREG_INTERCEPT(close, timeperiod=14) - close
     # df['LINEARREG_SLOPE'] = talib.LINEARREG_SLOPE(close, timeperiod=14)
     df['STDDEV'] = talib.STDDEV(close, timeperiod=5, nbdev=1)
+    df['_CLOSE_PCT_CHANGE'] = -close.pct_change(-5) # ５単位時間後との価格差
 
     return df
 
@@ -332,8 +333,19 @@ def buyORsell(df, logic=0):
                     buysell = BUY
                 elif is_gcdc(df, MA_times) and gcdc == "DC":
                     buysell = SELL
-    elif logic == 3:
-        pass
+    elif logic == -1:
+        """
+        （注意：未来データを使ったテスト指標なので実際には使えない）
+        ５単位時間後にどのくらい価格変化するかを表した指標（_CLOSE_PCT_CHANGE）が
+        border%以上変化する場合、売買する。
+        """
+        border = 0.03
+
+        if df['_CLOSE_PCT_CHANGE'][-1] >= border:
+            buysell = BUY
+        elif df['_CLOSE_PCT_CHANGE'][-1] <= -border:
+            buysell = SELL
+
     else:
         logger.error("対応ロジックなし logic: " + logic)
 
@@ -355,15 +367,50 @@ def show_buysellpoint(df):
     logger.info("\n" + str(df.tail(100)))
 
 
-def get_BUYSELLprice(yen_price, coin_price, mode=0, oneline_df=None):
+
+def get_BUYSELLprice(yen_price, coin_price, coin, jpy, price_decision_logic=0, oneline_df=None):
     BUYSELLprice = 0.0
 
-    if mode == 0:
+    if price_decision_logic == 0:
         BUYSELLprice = yen_price
 
-    elif mode == 1 and oneline_df is not None:
+    elif price_decision_logic == 1 and oneline_df is not None:
+        """
+        連続GC/DC回数と、WEIGHT_OF_PRICE(重み付け)から売り買い価格を決める
+        """
         BUYSELLprice = yen_price * oneline_df['GCDC_times'][0] * WEIGHT_OF_PRICE
         # BUYSELLprice = yen_price * np.log10(oneline_df['GCDC_times'][0])
+    elif price_decision_logic == 2 and oneline_df is not None:
+        """
+        連続GC/DC回数と、WEIGHT_OF_PRICE(重み付け)から売り買い価格を決める
+        売り価格は所持仮想通貨数(coin)、買い価格は所持日本円(jpy)から決める
+        """
+        gcdt_times = oneline_df['GCDC_times'][0]
+        weight = (gcdt_times/MA_times * WEIGHT_OF_PRICE)*0.3
+        # logger.debug(f"{weight=:.2%}")
+        ma_diff = oneline_df['ma_diff'][0]
+
+        if ma_diff < 0:
+            # 売り
+            BUYSELLprice = coin*coin_price*weight
+        elif ma_diff > 0:
+            # 買い
+            BUYSELLprice = jpy*weight
+
+    elif price_decision_logic == -1:
+        """
+        n単位時間後の価格変化率(pct_chg)から売り買い価格を決める
+        売り価格は所持仮想通貨数(coin)、買い価格は所持日本円(jpy)から決める
+        """
+        pct_chg = oneline_df['_CLOSE_PCT_CHANGE'][0]
+        if pct_chg < 0:
+            # 売り
+            BUYSELLprice = coin*coin_price*np.abs(pct_chg*2.0)
+        elif pct_chg > 0:
+            # 買い
+            BUYSELLprice = jpy*np.abs(pct_chg*2.0)
+
+        # BUYSELLprice = yen_price * (1.0+np.abs(oneline_df['_CLOSE_PCT_CHANGE'][0]))*4
 
     return BUYSELLprice
 
@@ -377,6 +424,7 @@ def simulate(df, logic=0, init_yen=100000, init_coin=100, price_decision_logic=0
     logic : int
         0 : デフォルトロジック
         1 : ・・・
+        -1 : n単位時間後にどのくらい価格変化するかを表した指標（実際には使えない）
     init_yen : int 初期日本円
     init_coin : int 初期仮想通貨数
     price_decision_logic : int 売買決定決定ロジック
@@ -395,22 +443,24 @@ def simulate(df, logic=0, init_yen=100000, init_coin=100, price_decision_logic=0
 
         coin_price = tmp_df['Close'][0]  # 購入する仮想通貨の現在の価格
 
+        pct_chg = tmp_df['_CLOSE_PCT_CHANGE'][0]
+
         if buyORsell(tmp_df, logic) == BUY:
             df.at[i, 'BUYSELL'] = BUY
 
-            buy_price = get_BUYSELLprice(BUY_PRICE, coin_price, price_decision_logic, tmp_df)  # 購入する仮想通貨の枚数
-            # price = BUY_PRICE/coin_price
+            buy_price = get_BUYSELLprice(BUY_PRICE, coin_price, coin, yen, price_decision_logic=price_decision_logic, oneline_df=tmp_df)  # 購入する仮想通貨の枚数
             yen -= buy_price
             coin += buy_price/coin_price
-            logger.debug(f'[BUY]{tmp_df.index.strftime("%Y/%m/%d %H:%M")[0]}: BUY_PRICE: {buy_price}')
+            logger.debug(f'[BUY]{tmp_df.index.strftime("%Y/%m/%d %H:%M")[0]}: BUY_PRICE: {buy_price:.2f} {coin=:.2f}')
+            # logger.debug(f'   PCT_CHG:{pct_chg:.2%} jpy:{yen}')
 
         elif buyORsell(tmp_df, logic) == SELL:
             df.at[i, 'BUYSELL'] = SELL
-            sell_price = get_BUYSELLprice(SELL_PRICE, coin_price, price_decision_logic, tmp_df)  # 購入する仮想通貨の枚数
-            # price = SELL_PRICE/coin_price  # 購入する仮想通貨の枚数
+            sell_price = get_BUYSELLprice(SELL_PRICE, coin_price, coin, yen, price_decision_logic=price_decision_logic, oneline_df=tmp_df)  # 購入する仮想通貨の枚数
             yen += sell_price
             coin -= sell_price/coin_price
-            logger.debug(f'[SELL]{tmp_df.index.strftime("%Y/%m/%d %H:%M")[0]}: SELL_PRICE: {sell_price}')
+            logger.debug(f'[SELL]{tmp_df.index.strftime("%Y/%m/%d %H:%M")[0]}: SELL_PRICE: {sell_price:.2f} {coin=:.2f}')
+            # logger.debug(f'   PCT_CHG:{pct_chg:.2%} coin:{coin}')
 
         df.at[i, 'SimulateAsset'] = yen + coin*coin_price  # SimulateAsset
         df.at[i, 'Profit'] = df.at[i, 'SimulateAsset'] - init_asset  # Profit
@@ -479,7 +529,7 @@ def main():
 
     # 移動平均(MA)とRSIを計算、設定
     df = set_ma_rsi(df)
-    # df.to_csv("sampledata_1000days.csv")
+    # df.to_csv("sampledata_100days.csv")
     # logger.info("\n" + str(df.tail(40)))
 
     # 対象通貨の現在の価格
@@ -488,11 +538,21 @@ def main():
     if args.s is not None:
         # シミュレーション
         # set_parameter(ma_times=ma_times)
-        sim_df = simulate(df, logic=1, init_yen=100000, init_coin=1000, price_decision_logic=1)
+        sim_df = simulate(df, logic=2, init_yen=100000, init_coin=100, price_decision_logic=2)
         logger.info("\n" + str(sim_df.tail(300)))
-        print(f"Profit:{sim_df['Profit'][-1]}")
-        sim_df.to_csv("sampledata_1000days_result.csv")
+
+        print(f"Profit:{sim_df['Profit'][-1]:.0f}円({1+sim_df['Profit'][-1]/sim_df['SimulateAsset'][0]:.2%})")
+        # sim_df.to_csv("sampledata_30days_result.csv")
         save_gragh(sim_df, "simulate00.png")
+
+        # df内の各パラメータの相関を確認
+        # import seaborn as sns
+        # df_corr = df.corr()
+        # plt.figure(figsize=(60,40))
+        # sns.heatmap(df_corr, annot=True)
+        # plt.title("Corr Heatmap")
+        # plt.savefig("heatmap.png", format="png")
+
     else:
         if buyORsell(df) == SELL:
             # ##################
