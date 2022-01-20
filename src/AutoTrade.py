@@ -451,7 +451,7 @@ def simulate(df, logic=0, init_yen=100000, init_coin=100, price_decision_logic=0
             buy_price = get_BUYSELLprice(BUY_PRICE, coin_price, coin, yen, price_decision_logic=price_decision_logic, oneline_df=tmp_df)  # 購入する仮想通貨の枚数
             yen -= buy_price
             coin += buy_price/coin_price
-            logger.debug(f'[BUY]{tmp_df.index.strftime("%Y/%m/%d %H:%M")[0]}: BUY_PRICE: {buy_price:.2f} {coin=:.2f}')
+            # logger.debug(f'[BUY]{tmp_df.index.strftime("%Y/%m/%d %H:%M")[0]}: BUY_PRICE: {buy_price:.2f} {coin=:.2f}')
             # logger.debug(f'   PCT_CHG:{pct_chg:.2%} jpy:{yen}')
 
         elif buyORsell(tmp_df, logic) == SELL:
@@ -459,7 +459,7 @@ def simulate(df, logic=0, init_yen=100000, init_coin=100, price_decision_logic=0
             sell_price = get_BUYSELLprice(SELL_PRICE, coin_price, coin, yen, price_decision_logic=price_decision_logic, oneline_df=tmp_df)  # 購入する仮想通貨の枚数
             yen += sell_price
             coin -= sell_price/coin_price
-            logger.debug(f'[SELL]{tmp_df.index.strftime("%Y/%m/%d %H:%M")[0]}: SELL_PRICE: {sell_price:.2f} {coin=:.2f}')
+            # logger.debug(f'[SELL]{tmp_df.index.strftime("%Y/%m/%d %H:%M")[0]}: SELL_PRICE: {sell_price:.2f} {coin=:.2f}')
             # logger.debug(f'   PCT_CHG:{pct_chg:.2%} coin:{coin}')
 
         df.at[i, 'SimulateAsset'] = yen + coin*coin_price  # SimulateAsset
@@ -495,6 +495,205 @@ def save_gragh(df, filename):
     plt.ylabel("Price")
 
     plt.savefig(filename, format="png")
+
+"""
+Force Entry Priceは買うと決めてから約定するまで指値で追いかけた場合に、実際に約定する価格
+force_entry_time: 約定するまでにかかった時間
+
+やっていること
+1. 毎時刻、与えられた指値価格で、指値を出す
+2. 指値が約定したら、指値をForce Entry Priceとする
+3. 指値が約定しなかったら、次の時刻へ進み、1へ戻る
+
+"""
+def calc_force_entry_price(entry_price=None, lo=None, pips=None):
+    y = entry_price.copy() # ロングのときは購入価格
+    y[:] = np.nan
+
+    # shapeをあわせてNaNで埋める
+    force_entry_time = entry_price.copy()
+    force_entry_time[:] = np.nan
+
+    """
+    時刻i
+      ----- i ------------------------------------->
+          y[i]
+
+    時刻j
+      -------------------- j-1 ---------------- j ------------------>
+                entry_price[j-1]  >  low[j]
+
+    """
+    for i in range(entry_price.size):
+        for j in range(i + 1, entry_price.size):
+          # ある時刻（i）より先の時刻(j)の価格を見る
+            if round(lo[j] / pips) < round(entry_price[j - 1] / pips):
+              # 約定した場合（時刻j-1のenrty_price（購入価格）が時刻j安値より高い場合）
+              # ある時刻iの目的変数を約定価格にする
+              y[i] = entry_price[j - 1]
+              # force_entry_time: 約定するまでにかかった時間
+              force_entry_time[i] = j - i
+              if i < 3:
+                print(f"i:{i}, j:{j}, y[{i}]:{y[i]}")
+                print(f"  lo[j] < entry_price[j-1] : {lo[j]} < {entry_price[j-1]}")
+                print(f"  fep[{i}]:{force_entry_time[i]}")
+              break
+
+    return y, force_entry_time
+
+"""
+y計算ロジック
+1. 毎時刻、あるルールで計算された指値距離(limit_price_dist)に基づいて、買い指値を出す
+2. 買い指値が約定しなかった場合のyはゼロとする
+3. 買い指値が約定した場合、一定時間(horizon)だけ待ってから、Force Entry Priceの執行方法でエグジットする
+4. エグジット価格 / エントリー価格 - 1 - 2 * feeをyとする
+"""
+def set_y(df):
+    # 呼び値 (取引所、取引ペアごとに異なるので、適切に設定してください)
+    pips = 1
+
+    # ATRで指値距離を計算します
+    limit_price_dist = df['ATR'] * 0.5
+    limit_price_dist = np.maximum(1, (limit_price_dist / pips).round().fillna(1)) * pips
+
+    # 終値から両側にlimit_price_distだけ離れたところに、買い指値と売り指値を出します
+    df['buy_price'] = df['Close'] - limit_price_dist
+    df['sell_price'] = df['Close'] + limit_price_dist
+
+    features = sorted([
+        'ADX',
+        'ADXR',
+        'APO',
+        'AROON_aroondown',
+        'AROON_aroonup',
+        'AROONOSC',
+        'CCI',
+        'DX',
+        'MACD_macd',
+        'MACD_macdsignal',
+        'MACD_macdhist',
+        'MFI',
+    #     'MINUS_DI',
+    #     'MINUS_DM',
+        'MOM',
+    #     'PLUS_DI',
+    #     'PLUS_DM',
+        'RSI',
+        'STOCH_slowk',
+        'STOCH_slowd',
+        'STOCHF_fastk',
+    #     'STOCHRSI_fastd',
+        'ULTOSC',
+        'WILLR',
+    #     'ADOSC',
+    #     'NATR',
+        'HT_DCPERIOD',
+        'HT_DCPHASE',
+        'HT_PHASOR_inphase',
+        'HT_PHASOR_quadrature',
+        'HT_TRENDMODE',
+        'BETA',
+        'LINEARREG',
+        'LINEARREG_ANGLE',
+        'LINEARREG_INTERCEPT',
+        'LINEARREG_SLOPE',
+        'STDDEV',
+        'BBANDS_upperband',
+        'BBANDS_middleband',
+        'BBANDS_lowerband',
+        'DEMA',
+        'EMA',
+        'HT_TRENDLINE',
+        'KAMA',
+        'MA',
+        'MIDPOINT',
+        'T3',
+        'TEMA',
+        'TRIMA',
+        'WMA',
+    ])
+    df['fee'] = 0.0
+
+    # Force Entry Priceの計算
+    # 買いの場合
+    print("買い")
+    df['buy_fep'], df['buy_fet'] = calc_force_entry_price(
+        entry_price=df['buy_price'].values,
+        lo=df['Low'].values,
+        pips=pips,
+    )
+
+
+    # calc_force_entry_priceは入力と出力をマイナスにすれば売りに使えます
+    print("売り")
+    df['sell_fep'], df['sell_fet'] = calc_force_entry_price(
+        entry_price=-df['sell_price'].values,
+        lo=-df['High'].values, # 売りのときは高値
+        pips=pips,
+    )
+    df['sell_fep'] *= -1
+
+
+    horizon = 1 # エントリーしてからエグジットを始めるまでの待ち時間 (1以上である必要がある)
+    fee = df['fee'] # maker手数料
+
+    # 指値が約定したかどうか (0, 1)
+    df['buy_executed'] = ((df['buy_price'] / pips).round() > (df['Low'].shift(-1) / pips).round()).astype('float64')
+    df['sell_executed'] = ((df['sell_price'] / pips).round() < (df['High'].shift(-1) / pips).round()).astype('float64')
+
+
+    # yを計算
+    df['y_buy'] = np.where(
+        df['buy_executed'], # 約定し、
+        df['sell_fep'].shift(-horizon) / df['buy_price'] - 1 - 2 * fee, # horizon時間後に売ったときにどれくらいの割合変化したか？
+        0
+    )
+    df['y_sell'] = np.where(
+        df['sell_executed'],
+        -(df['buy_fep'].shift(-horizon) / df['sell_price'] - 1) - 2 * fee,
+        0
+    )
+
+    # バックテストで利用する取引コストを計算
+    df['buy_cost'] = np.where(
+        df['buy_executed'],
+        df['buy_price'] / df['Close'] - 1 + fee,
+        0
+    )
+    df['sell_cost'] = np.where(
+        df['sell_executed'],
+        -(df['sell_price'] / df['Close'] - 1) + fee,
+        0
+    )
+
+    # pp(df[['Close', 'Low', 'buy_price', 'buy_fep', 'buy_fet', 'buy_executed', 'y_buy', 'buy_cost', 'sell_price', 'sell_fep', 'sell_fet', 'sell_executed', 'y_sell', 'sell_cost']])
+
+    print('約定確率を可視化。時期によって約定確率が大きく変わると良くない。')
+    df['buy_executed'].rolling(1000).mean().plot(label='買い')
+    df['sell_executed'].rolling(1000).mean().plot(label='売り')
+    plt.title('約定確率の推移')
+    plt.legend(bbox_to_anchor=(1.05, 1))
+    # plt.show()
+
+    print('エグジットまでの時間分布を可視化。長すぎるとロングしているだけとかショートしているだけになるので良くない。')
+    df['buy_fet'].rolling(1000).mean().plot(label='買い')
+    df['sell_fet'].rolling(1000).mean().plot(label='売り')
+    plt.title('エグジットまでの平均時間推移')
+    plt.legend(bbox_to_anchor=(1.2, 1))
+    # plt.show()
+
+    df['buy_fet'].hist(alpha=0.3, label='買い')
+    df['sell_fet'].hist(alpha=0.3, label='売り')
+    plt.title('エグジットまでの時間分布')
+    plt.legend(bbox_to_anchor=(1.2, 1))
+    # plt.show()
+
+    print('毎時刻、この執行方法でトレードした場合の累積リターン')
+    df['y_buy'].cumsum().plot(label='買い')
+    df['y_sell'].cumsum().plot(label='売り')
+    plt.title('累積リターン')
+    plt.legend(bbox_to_anchor=(1.05, 1))
+    # plt.show()
 
 def set_parameter(ma_short=MA_short, ma_long=MA_long, ma_times=MA_times, vol_order=VOL_ORDER):
     global MA_short
@@ -534,6 +733,9 @@ def main():
 
     # 対象通貨の現在の価格
     coin_price = df['Close'][-1]
+
+    # 目標変数を設定
+    set_y(df)
 
     if args.s is not None:
         # シミュレーション
