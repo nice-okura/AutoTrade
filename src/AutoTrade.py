@@ -10,6 +10,10 @@ from argparse import ArgumentParser
 import matplotlib.pyplot as plt
 from pprint import pprint as pp
 import talib
+import lightgbm as lgb
+from sklearn.model_selection import cross_val_score, KFold, TimeSeriesSplit
+import joblib
+import japanize_matplotlib
 
 DEBUG = True
 
@@ -31,31 +35,89 @@ BUY = 1
 SELL = -1
 WEIGHT_OF_PRICE = 0.05  # 連続MA回数から購入金額を決めるときの重み
 
+features = sorted([
+        # 'ADX',
+        # 'ADXR',
+        # 'APO',
+        # 'AROON_aroondown',
+        # 'AROON_aroonup',
+        # 'AROONOSC',
+        # 'CCI',
+        # 'DX',
+        'MACD_macd',
+        'MACD_macdsignal',
+        'MACD_macdhist',
+        # 'MFI',
+    #     'MINUS_DI',
+    #     'MINUS_DM',
+        # 'MOM',
+    #     'PLUS_DI',
+    #     'PLUS_DM',
+        'RSI',
+        # 'STOCH_slowk',
+        # 'STOCH_slowd',
+        # 'STOCHF_fastk',
+    #     'STOCHRSI_fastd',
+        # 'ULTOSC',
+        # 'WILLR',
+    #     'ADOSC',
+    #     'NATR',
+        # 'HT_DCPERIOD',
+        # 'HT_DCPHASE',
+        # 'HT_PHASOR_inphase',
+        # 'HT_PHASOR_quadrature',
+        # 'HT_TRENDMODE',
+        # 'BETA',
+        # 'LINEARREG',
+        # 'LINEARREG_ANGLE',
+        # 'LINEARREG_INTERCEPT',
+        # 'LINEARREG_SLOPE',
+        # 'STDDEV',
+        'BBANDS_upperband',
+        'BBANDS_middleband',
+        'BBANDS_lowerband',
+        # 'DEMA',
+        # 'EMA',
+        # 'HT_TRENDLINE',
+        # 'KAMA',
+        # 'MA',
+        'MA_SHORT',
+        'MA_LONG',
+        'MIDPOINT',
+        # 'T3',
+        # 'TEMA',
+        # 'TRIMA',
+        # 'WMA',
+    ])
+
 # 1. ロガーを取得する
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)  # 出力レベルを設定
-
-# 2. ハンドラーを生成する
-h = logging.StreamHandler()
-h.setLevel(logging.DEBUG)  # 出力レベルを設定
-h2 = logging.FileHandler('./AutoTrade.log')
-if DEBUG == True:
-    h2.setLevel(logging.DEBUG)  # 出力レベルを設定
-else:
-    h2.setLevel(logging.INFO)  # 出力レベルを設定
-
-# 3. フォーマッタを生成する
-fmt = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-
-# 4. ハンドラーにフォーマッターを設定する
-h.setFormatter(fmt)
-h2.setFormatter(fmt)
-
-# 5. ロガーにハンドラーを設定する
-logger.addHandler(h)
-logger.addHandler(h2)
 
 cs = CryptService(URL, PUBLIC_URL, os.environ['API_KEY'], os.environ['API_SECRET'], "bitbank")
+
+def set_logger(logger):
+    logger.setLevel(logging.DEBUG)  # 出力レベルを設定
+
+    # 2. ハンドラーを生成する
+    h = logging.StreamHandler()
+    h.setLevel(logging.DEBUG)  # 出力レベルを設定
+    h2 = logging.FileHandler('./AutoTrade.log')
+    if DEBUG == True:
+        h2.setLevel(logging.DEBUG)  # 出力レベルを設定
+    else:
+        h2.setLevel(logging.INFO)  # 出力レベルを設定
+
+    # 3. フォーマッタを生成する
+    fmt = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+
+    # 4. ハンドラーにフォーマッターを設定する
+    h.setFormatter(fmt)
+    h2.setFormatter(fmt)
+
+    # 5. ロガーにハンドラーを設定する
+    logger.addHandler(h)
+    logger.addHandler(h2)
+
 
 def calc_features(df):
     open = df['Open']
@@ -133,6 +195,7 @@ def calc_features(df):
 
     return df
 
+
 def get_ohlcv(date, size, candle_type):
     """dateからsize単位時間分のOHLCVデータを取得する
 
@@ -185,6 +248,7 @@ def load_csv2pd(filename):
     df = df.astype(float)
 
     return df
+
 
 # 移動平均の差(ma_diff)と連続GC/DC回数を計算し、返却
 def get_madata(df):
@@ -367,7 +431,6 @@ def show_buysellpoint(df):
     logger.info("\n" + str(df.tail(100)))
 
 
-
 def get_BUYSELLprice(yen_price, coin_price, coin, jpy, price_decision_logic=0, oneline_df=None):
     BUYSELLprice = 0.0
 
@@ -533,10 +596,10 @@ def calc_force_entry_price(entry_price=None, lo=None, pips=None):
               y[i] = entry_price[j - 1]
               # force_entry_time: 約定するまでにかかった時間
               force_entry_time[i] = j - i
-              if i < 3:
-                print(f"i:{i}, j:{j}, y[{i}]:{y[i]}")
-                print(f"  lo[j] < entry_price[j-1] : {lo[j]} < {entry_price[j-1]}")
-                print(f"  fep[{i}]:{force_entry_time[i]}")
+              # if i < 3:
+              #   print(f"i:{i}, j:{j}, y[{i}]:{y[i]}")
+              #   print(f"  lo[j] < entry_price[j-1] : {lo[j]} < {entry_price[j-1]}")
+              #   print(f"  fep[{i}]:{force_entry_time[i]}")
               break
 
     return y, force_entry_time
@@ -560,58 +623,6 @@ def set_y(df):
     df['buy_price'] = df['Close'] - limit_price_dist
     df['sell_price'] = df['Close'] + limit_price_dist
 
-    features = sorted([
-        'ADX',
-        'ADXR',
-        'APO',
-        'AROON_aroondown',
-        'AROON_aroonup',
-        'AROONOSC',
-        'CCI',
-        'DX',
-        'MACD_macd',
-        'MACD_macdsignal',
-        'MACD_macdhist',
-        'MFI',
-    #     'MINUS_DI',
-    #     'MINUS_DM',
-        'MOM',
-    #     'PLUS_DI',
-    #     'PLUS_DM',
-        'RSI',
-        'STOCH_slowk',
-        'STOCH_slowd',
-        'STOCHF_fastk',
-    #     'STOCHRSI_fastd',
-        'ULTOSC',
-        'WILLR',
-    #     'ADOSC',
-    #     'NATR',
-        'HT_DCPERIOD',
-        'HT_DCPHASE',
-        'HT_PHASOR_inphase',
-        'HT_PHASOR_quadrature',
-        'HT_TRENDMODE',
-        'BETA',
-        'LINEARREG',
-        'LINEARREG_ANGLE',
-        'LINEARREG_INTERCEPT',
-        'LINEARREG_SLOPE',
-        'STDDEV',
-        'BBANDS_upperband',
-        'BBANDS_middleband',
-        'BBANDS_lowerband',
-        'DEMA',
-        'EMA',
-        'HT_TRENDLINE',
-        'KAMA',
-        'MA',
-        'MIDPOINT',
-        'T3',
-        'TEMA',
-        'TRIMA',
-        'WMA',
-    ])
     df['fee'] = 0.0
 
     # Force Entry Priceの計算
@@ -695,6 +706,59 @@ def set_y(df):
     plt.legend(bbox_to_anchor=(1.05, 1))
     # plt.show()
 
+    df.to_pickle('df_y.pkl')
+
+
+def fit():
+    df = pd.read_pickle('df_y.pkl')
+    df = df.dropna()
+
+    # モデル (コメントアウトで他モデルも試してみてください)
+    # model = RidgeCV(alphas=np.logspace(-7, 7, num=20))
+    model = lgb.LGBMRegressor(n_jobs=-1, random_state=1)
+
+    # アンサンブル (コメントアウトを外して性能を比較してみてください)
+    # model = BaggingRegressor(model, random_state=1, n_jobs=1)
+
+    # 本番用モデルの学習 (このチュートリアルでは使わない)
+    # 実稼働する用のモデルはデータ全体で学習させると良い
+    model.fit(df[features], df['y_buy'])
+    joblib.dump(model, 'model_y_buy.xz', compress=True)
+    model.fit(df[features], df['y_sell'])
+    joblib.dump(model, 'model_y_sell.xz', compress=True)
+
+    # 通常のCV
+    cv_indicies = list(KFold().split(df))
+    # ウォークフォワード法
+    # cv_indicies = list(TimeSeriesSplit().split(df))
+
+    # OOS予測値を計算
+    df['y_pred_buy'] = my_cross_val_predict(model, df[features].values, df['y_buy'].values, cv=cv_indicies)
+    df['y_pred_sell'] = my_cross_val_predict(model, df[features].values, df['y_sell'].values, cv=cv_indicies)
+
+    # 予測値が無い(nan)行をドロップ
+    df = df.dropna()
+
+    print('毎時刻、y_predがプラスのときだけトレードした場合の累積リターン')
+    df[df['y_pred_buy'] > 0]['y_buy'].cumsum().plot(label='買い')
+    df[df['y_pred_sell'] > 0]['y_sell'].cumsum().plot(label='売り')
+    (df['y_buy'] * (df['y_pred_buy'] > 0) + df['y_sell'] * (df['y_pred_sell'] > 0)).cumsum().plot(label='買い+売り')
+    plt.title('累積リターン')
+    plt.legend(bbox_to_anchor=(1.05, 1))
+    plt.savefig("chikuseki.png")
+    # plt.show()
+
+    df.to_pickle('df_fit.pkl')
+
+def my_cross_val_predict(estimator, X, y=None, cv=None):
+    y_pred = y.copy()
+    y_pred[:] = np.nan
+    for train_idx, val_idx in cv:
+        estimator.fit(X[train_idx], y[train_idx])
+        y_pred[val_idx] = estimator.predict(X[val_idx])
+    return y_pred
+
+
 def set_parameter(ma_short=MA_short, ma_long=MA_long, ma_times=MA_times, vol_order=VOL_ORDER):
     global MA_short
     global MA_long
@@ -713,6 +777,9 @@ def main():
     argparser.add_argument('-s', action='store_true', help='Simulate mode.')
     args = argparser.parse_args()
 
+    # ロガー設定
+    set_logger(logger)
+    
     # DataFrameの最大表示行数
     pd.set_option('display.max_rows', 100)
 
@@ -736,6 +803,9 @@ def main():
 
     # 目標変数を設定
     set_y(df)
+
+    # 学習
+    fit()
 
     if args.s is not None:
         # シミュレーション
