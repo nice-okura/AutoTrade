@@ -711,6 +711,7 @@ def main():
     argparser = ArgumentParser()
     argparser.add_argument('-l')
     argparser.add_argument('-s', action='store_true', help='Simulate mode.')
+    argparser.add_argument('--logic')
     args = argparser.parse_args()
 
     # DataFrameの最大表示行数
@@ -740,10 +741,27 @@ def main():
     if args.s is not None:
         # シミュレーション
         # set_parameter(ma_times=ma_times)
-        sim_df = simulate(df, logic=2, init_yen=100000, init_coin=100, price_decision_logic=2)
-        logger.info("\n" + str(sim_df.tail(300)))
 
+        # 初期パラメータ設定
+        logic = 2
+        init_yen = 100000
+        init_coin = 100
+        price_decision_logic = 2
+
+        # コマンドライン引数からパラメータ取得
+        if args.logic is not None:
+            logic = int(args.logic)
+
+        # シミュレーション開始
+        sim_df = simulate(df,
+            logic=logic,
+            init_yen=init_yen,
+            init_coin=init_coin,
+            price_decision_logic=price_decision_logic)
+
+        # 結果（利益）表示
         print(f"Profit:{sim_df['Profit'][-1]:.0f}円({1+sim_df['Profit'][-1]/sim_df['SimulateAsset'][0]:.2%})")
+
         # sim_df.to_csv("sampledata_30days_result.csv")
         save_gragh(sim_df, "simulate00.png")
 
