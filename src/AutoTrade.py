@@ -432,11 +432,12 @@ def simulate(df, logic=0, init_yen=100000, init_coin=100, price_decision_logic=0
     """
     yen = init_yen  # 初期日本円
     coin = init_coin  # 初期仮想通貨数
-    init_asset = init_yen + coin * df['Close'][0]
+    init_asset = init_yen + init_coin * df['Close'][0]
     df['BUYSELL'] = 0             # 売り買いの識別　index 8
     df['SimulateAsset'] = 0.0     # シミュレーションしたときの総資産　index 9
     df['Profit'] = 0.0            # シミュレーションしたときの利益（総資産ー初期資産）index 10
-    df['Coin'] = 0.0              # 所持仮想通貨数　index 11
+    df['Coin'] = init_coin        # 所持仮想通貨数　index 11
+    df['JPY'] = init_yen
 
     for i, r in df.iterrows():
         tmp_df = pd.DataFrame([r])
@@ -462,9 +463,12 @@ def simulate(df, logic=0, init_yen=100000, init_coin=100, price_decision_logic=0
             # logger.debug(f'[SELL]{tmp_df.index.strftime("%Y/%m/%d %H:%M")[0]}: SELL_PRICE: {sell_price:.2f} {coin=:.2f}')
             # logger.debug(f'   PCT_CHG:{pct_chg:.2%} coin:{coin}')
 
-        df.at[i, 'SimulateAsset'] = yen + coin*coin_price  # SimulateAsset
-        df.at[i, 'Profit'] = df.at[i, 'SimulateAsset'] - init_asset  # Profit
-        df.at[i, 'Coin'] = coin  # Coin
+        df.at[i, 'SimulateAsset'] = yen + coin*coin_price
+        df.at[i, 'Profit'] = df.at[i, 'SimulateAsset'] - init_asset
+        df.at[i, 'Coin'] = coin
+        df.at[i, 'JPY'] = yen
+        df.at[i, 'GachihoAsset'] = init_yen + init_coin*coin_price
+        df.at[i, 'GachihoProfit'] = df.at[i, 'GachihoAsset'] - init_asset
 
     return df
 
@@ -735,8 +739,8 @@ def main():
     # 対象通貨の現在の価格
     coin_price = df['Close'][-1]
 
-    # 目標変数を設定
-    set_y(df)
+    # # 目標変数を設定
+    # set_y(df)
 
     if args.s is not None:
         # シミュレーション
@@ -760,8 +764,13 @@ def main():
             price_decision_logic=price_decision_logic)
 
         # 結果（利益）表示
-        print(f"Profit:{sim_df['Profit'][-1]:.0f}円({1+sim_df['Profit'][-1]/sim_df['SimulateAsset'][0]:.2%})")
+        print(f"シミュレーション利益:{sim_df['Profit'][-1]:.0f}円({1+sim_df['Profit'][-1]/sim_df['SimulateAsset'][0]:.2%})")
 
+        # はじめからガチホしていた場合
+        print(f"ガチホ時の利益:{sim_df['GachihoProfit'][-1]:.0f}円({1+sim_df['GachihoProfit'][-1]/sim_df['SimulateAsset'][0]:.2%})")
+
+        # 利益 / ガチホ利益
+        print(f"ガチホと比較した効果：{sim_df['SimulateAsset'][-1]/sim_df['GachihoAsset'][-1]:.2%}")
         # sim_df.to_csv("sampledata_30days_result.csv")
         save_gragh(sim_df, "simulate00.png")
 
