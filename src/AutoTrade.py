@@ -486,17 +486,24 @@ def set_ma_rsi(df):
     return df
 
 def save_gragh(df, filename):
-    plt.subplot(211)
-    plt.plot(df.index, df["Profit"])
+    plt.subplot(311)
+    plt.plot(df.index, df["Profit"], label="Profit")
     plt.title("Profit Graph")
     plt.xlabel("Date")
     plt.ylabel("Profit")
 
-    plt.subplot(212)
-    plt.plot(df.index, df["Close"])
+    plt.subplot(312)
+    plt.plot(df.index, df["Close"], label="Close")
     plt.title("Price Graph")
     plt.xlabel("Date")
     plt.ylabel("Price")
+
+    plt.subplot(311)
+    plt.plot(df.index, df["GachihoProfit"], label="GachihoProfit")
+    plt.title("Gachiho Price Graph")
+    plt.xlabel("Date")
+    plt.ylabel("Price")
+    plt.legend()
 
     plt.savefig(filename, format="png")
 
