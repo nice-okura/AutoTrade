@@ -333,6 +333,7 @@ def buyORsell(df, logic=0):
                     buysell = BUY
                 elif is_gcdc(df, MA_times) and gcdc == "DC":
                     buysell = SELL
+
     elif logic == -1:
         """
         （注意：未来データを使ったテスト指標なので実際には使えない）
@@ -365,7 +366,6 @@ def show_buysellpoint(df):
         elif buyORsell(tmp_df) == SELL:
             df.iat[i, 8] = "SELL"
     logger.info("\n" + str(df.tail(100)))
-
 
 
 def get_BUYSELLprice(yen_price, coin_price, coin, jpy, price_decision_logic=0, oneline_df=None):
@@ -452,7 +452,7 @@ def simulate(df, logic=0, init_yen=100000, init_coin=100, price_decision_logic=0
             buy_price = get_BUYSELLprice(BUY_PRICE, coin_price, coin, yen, price_decision_logic=price_decision_logic, oneline_df=tmp_df)  # 購入する仮想通貨の枚数
             yen -= buy_price
             coin += buy_price/coin_price
-            # logger.debug(f'[BUY]{tmp_df.index.strftime("%Y/%m/%d %H:%M")[0]}: BUY_PRICE: {buy_price:.2f} {coin=:.2f}')
+            logger.debug(f'[BUY]{tmp_df.index.strftime("%Y/%m/%d %H:%M")[0]}: BUY_PRICE: {buy_price:.2f} {coin=:.2f}')
             # logger.debug(f'   PCT_CHG:{pct_chg:.2%} jpy:{yen}')
 
         elif buyORsell(tmp_df, logic) == SELL:
@@ -460,7 +460,7 @@ def simulate(df, logic=0, init_yen=100000, init_coin=100, price_decision_logic=0
             sell_price = get_BUYSELLprice(SELL_PRICE, coin_price, coin, yen, price_decision_logic=price_decision_logic, oneline_df=tmp_df)  # 購入する仮想通貨の枚数
             yen += sell_price
             coin -= sell_price/coin_price
-            # logger.debug(f'[SELL]{tmp_df.index.strftime("%Y/%m/%d %H:%M")[0]}: SELL_PRICE: {sell_price:.2f} {coin=:.2f}')
+            logger.debug(f'[SELL]{tmp_df.index.strftime("%Y/%m/%d %H:%M")[0]}: SELL_PRICE: {sell_price:.2f} {coin=:.2f}')
             # logger.debug(f'   PCT_CHG:{pct_chg:.2%} coin:{coin}')
 
         df.at[i, 'SimulateAsset'] = yen + coin*coin_price
@@ -747,10 +747,11 @@ def main():
         # 前日までのデータを収集
         date = datetime.now() - timedelta(days=1)
         df = get_ohlcv(date, MA_long*2, CANDLE_TYPE)
+        # df = get_ohlcv(date, 24*200, CANDLE_TYPE)
 
     # 移動平均(MA)とRSIを計算、設定
     df = set_ma_rsi(df)
-    # df.to_csv("sampledata_100days.csv")
+    # df.to_csv("sampledata_200days.csv")
     # logger.info("\n" + str(df.tail(40)))
 
     # 対象通貨の現在の価格
@@ -767,7 +768,7 @@ def main():
         logic = 2
         init_yen = 100000
         init_coin = 100
-        price_decision_logic = 2
+        price_decision_logic = -1
 
         # コマンドライン引数からパラメータ取得
         if args.logic is not None:
