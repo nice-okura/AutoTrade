@@ -24,9 +24,9 @@ PAIR = 'qtum_jpy'  # 対象通貨
 MA_times = 12  # コインを購入/売却金額する連続GC/DC回数
 BUY_PRICE = 400.0  # 購入金額(円)
 SELL_PRICE = 400.0  # 売却金額(円)
-RSI_SELL = 85.0  # 売りRSIボーダー
+RSI_SELL = 65.0  # 売りRSIボーダー
 RSI_BUY = 100.0 - RSI_SELL  # 買いRSIボーダー
-VOL_ORDER = 20000  # 取引する基準となる取引量(Volume)
+VOL_ORDER = 20  # 取引する基準となる取引量(Volume)
 BUY = 1
 SELL = -1
 WEIGHT_OF_PRICE = 0.05  # 連続MA回数から購入金額を決めるときの重み
@@ -103,7 +103,7 @@ def calc_features(df):
     df['RSI'] = talib.RSI(close, timeperiod=14)
     # df['STOCH_slowk'], df['STOCH_slowd'] = talib.STOCH(high, low, close, fastk_period=5, slowk_period=3, slowk_matype=0, slowd_period=3, slowd_matype=0)
     # df['STOCHF_fastk'], df['STOCHF_fastd'] = talib.STOCHF(high, low, close, fastk_period=5, fastd_period=3, fastd_matype=0)
-    # df['STOCHRSI_fastk'], df['STOCHRSI_fastd'] = talib.STOCHRSI(close, timeperiod=14, fastk_period=5, fastd_period=3, fastd_matype=0)
+    df['STOCHRSI_fastk'], df['STOCHRSI_fastd'] = talib.STOCHRSI(close, timeperiod=14, fastk_period=5, fastd_period=3, fastd_matype=0)
     # df['TRIX'] = talib.TRIX(close, timeperiod=30)
     # df['ULTOSC'] = talib.ULTOSC(high, low, close, timeperiod1=7, timeperiod2=14, timeperiod3=28)
     # df['WILLR'] = talib.WILLR(high, low, close, timeperiod=14)
@@ -231,9 +231,9 @@ def is_gcdc(df, times):
 def buysell_by_rsi(df):
     buysell = 0
 
-    if df['rsi'][-1] <= RSI_BUY:
+    if df['RSI'][-1] <= RSI_BUY:
         buysell = BUY
-    elif df['rsi'][-1] >= RSI_SELL:
+    elif df['RSI'][-1] >= RSI_SELL:
         buysell = SELL
 
     return buysell
@@ -333,6 +333,14 @@ def buyORsell(df, logic=0):
                     buysell = BUY
                 elif is_gcdc(df, MA_times) and gcdc == "DC":
                     buysell = SELL
+    elif logic == 3:
+        """
+        RSIだけで判断
+        """
+        if buysell_by_rsi(df) == BUY:
+            buysell = BUY
+        elif buysell_by_rsi == SELL:
+            buysell = SELL
 
     elif logic == -1:
         """
@@ -452,7 +460,7 @@ def simulate(df, logic=0, init_yen=100000, init_coin=100, price_decision_logic=0
             buy_price = get_BUYSELLprice(BUY_PRICE, coin_price, coin, yen, price_decision_logic=price_decision_logic, oneline_df=tmp_df)  # 購入する仮想通貨の枚数
             yen -= buy_price
             coin += buy_price/coin_price
-            logger.debug(f'[BUY]{tmp_df.index.strftime("%Y/%m/%d %H:%M")[0]}: BUY_PRICE: {buy_price:.2f} {coin=:.2f}')
+            # logger.debug(f'[BUY]{tmp_df.index.strftime("%Y/%m/%d %H:%M")[0]}: BUY_PRICE: {buy_price:.2f} {coin=:.2f}')
             # logger.debug(f'   PCT_CHG:{pct_chg:.2%} jpy:{yen}')
 
         elif buyORsell(tmp_df, logic) == SELL:
@@ -460,7 +468,7 @@ def simulate(df, logic=0, init_yen=100000, init_coin=100, price_decision_logic=0
             sell_price = get_BUYSELLprice(SELL_PRICE, coin_price, coin, yen, price_decision_logic=price_decision_logic, oneline_df=tmp_df)  # 購入する仮想通貨の枚数
             yen += sell_price
             coin -= sell_price/coin_price
-            logger.debug(f'[SELL]{tmp_df.index.strftime("%Y/%m/%d %H:%M")[0]}: SELL_PRICE: {sell_price:.2f} {coin=:.2f}')
+            # logger.debug(f'[SELL]{tmp_df.index.strftime("%Y/%m/%d %H:%M")[0]}: SELL_PRICE: {sell_price:.2f} {coin=:.2f}')
             # logger.debug(f'   PCT_CHG:{pct_chg:.2%} coin:{coin}')
 
         df.at[i, 'SimulateAsset'] = yen + coin*coin_price
@@ -486,34 +494,56 @@ def set_ma_rsi(df):
     return df
 
 def save_gragh(df, filename):
-    plt.figure(figsize=(10,7))
-    plt.subplot(211)
+    plt.figure(figsize=(60,10))
+    plt.subplot(411)
     plt.plot(df.index, df["Profit"], label="Profit")
     plt.title("Profit Graph")
     plt.xlabel("Date")
     plt.ylabel("Profit")
 
-    plt.subplot(212)
+    plt.subplot(412)
     plt.plot(df.index, df["Close"], label="Close")
     plt.title("Price Graph")
     plt.xlabel("Date")
     plt.ylabel("Price")
 
-    plt.subplot(211)
+    plt.subplot(411)
     plt.plot(df.index, df["GachihoProfit"], label="GachihoProfit")
-    plt.title("Gachiho Price Graph")
-    plt.xlabel("Date")
-    plt.ylabel("Price")
     plt.legend()
 
-    plt.subplot(212)
-    for i, r in df.iterrows():
-        d = pd.DataFrame([r])
+    plt.subplot(412)
+    buydf = df[df['BUYSELL'] == 1]
+    selldf = df[df['BUYSELL'] == -1]
+    plt.scatter(buydf.index, buydf['Close'], label='BUY', color='red')
+    plt.scatter(selldf.index, selldf['Close'], label='SELL', color='blue')
+    plt.legend()
 
-        if d['BUYSELL'][0] == BUY:
-            plt.plot(d.index, d['Close'][0], marker='o', markersize=5, label='BUY', color='red')
-        elif d['BUYSELL'][0] == SELL:
-            plt.plot(d.index, d['Close'][0], marker='o', markersize=5, label='SELL', color='blue')
+    plt.subplot(413)
+    plt.plot(df.index, df['STOCHRSI_fastk'], label='STOCHRSI_k')
+    plt.plot(df.index, df['STOCHRSI_fastd'], label='STOCHRSI_d')
+    plt.legend()
+    plt.xlabel("Date")
+    plt.ylabel("STOCHRSI")
+
+    plt.subplot(414)
+    plt.plot(df.index, df['RSI'], label='RSI')
+    plt.legend()
+    plt.xlabel("Date")
+    plt.ylabel("RSI")
+    # plt.plot(buydf.index, buydf['Close'], marker='o', markersize=5, label='BUY', color='red')
+    # plt.plot(selldf.index, selldf['Close'], marker='o', markersize=5, label='SELL', color='blue')
+
+
+    # for i, r in df.iterrows():
+    #     d = pd.DataFrame([r])
+    #     nd = pd.DataFrame()
+    #
+    #     if d['BUYSELL'][0] == BUY:
+    #         nd['Date'] = d.index
+    #         nd['Close'] = d['Close']
+    #         plt.plot(d.index, d['Close'][0], marker='o', markersize=5, label='BUY', color='red')
+    #     elif d['BUYSELL'][0] == SELL:
+    #         plt.plot(d.index, d['Close'][0], marker='o', markersize=5, label='SELL', color='blue')
 
     plt.savefig(filename, format="png")
 
