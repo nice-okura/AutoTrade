@@ -24,9 +24,9 @@ PAIR = 'qtum_jpy'  # 対象通貨
 MA_times = 12  # コインを購入/売却金額する連続GC/DC回数
 BUY_PRICE = 400.0  # 購入金額(円)
 SELL_PRICE = 400.0  # 売却金額(円)
-RSI_SELL = 65.0  # 売りRSIボーダー
+RSI_SELL = 60.0  # 売りRSIボーダー
 RSI_BUY = 100.0 - RSI_SELL  # 買いRSIボーダー
-VOL_ORDER = 20  # 取引する基準となる取引量(Volume)
+VOL_ORDER = 200000  # 取引する基準となる取引量(Volume)
 BUY = 1
 SELL = -1
 WEIGHT_OF_PRICE = 0.05  # 連続MA回数から購入金額を決めるときの重み
@@ -101,7 +101,7 @@ def calc_features(df):
     # df['PLUS_DI'] = talib.PLUS_DI(high, low, close, timeperiod=14)
     # df['PLUS_DM'] = talib.PLUS_DM(high, low, timeperiod=14)
     df['RSI'] = talib.RSI(close, timeperiod=14)
-    # df['STOCH_slowk'], df['STOCH_slowd'] = talib.STOCH(high, low, close, fastk_period=5, slowk_period=3, slowk_matype=0, slowd_period=3, slowd_matype=0)
+    df['STOCH_slowk'], df['STOCH_slowd'] = talib.STOCH(high, low, close, fastk_period=5, slowk_period=3, slowk_matype=0, slowd_period=3, slowd_matype=0)
     # df['STOCHF_fastk'], df['STOCHF_fastd'] = talib.STOCHF(high, low, close, fastk_period=5, fastd_period=3, fastd_matype=0)
     df['STOCHRSI_fastk'], df['STOCHRSI_fastd'] = talib.STOCHRSI(close, timeperiod=14, fastk_period=5, fastd_period=3, fastd_matype=0)
     # df['TRIX'] = talib.TRIX(close, timeperiod=30)
@@ -326,7 +326,7 @@ def buyORsell(df, logic=0):
         if buysell_by_vol(df):
             if buysell_by_rsi(df) == BUY:
                 buysell = BUY
-            elif buysell_by_rsi == SELL:
+            elif buysell_by_rsi(df) == SELL:
                 buysell = SELL
             else:
                 if is_gcdc(df, MA_times) and gcdc == "GC":
@@ -339,8 +339,27 @@ def buyORsell(df, logic=0):
         """
         if buysell_by_rsi(df) == BUY:
             buysell = BUY
-        elif buysell_by_rsi == SELL:
+        elif buysell_by_rsi(df) == SELL:
             buysell = SELL
+
+    elif logic == 4:
+        """
+        STOCH RSIで判断
+        """
+        price = df['Close'][-1]
+        k = df['STOCH_slowk'][-1]
+        d = df['STOCH_slowd'][-1]
+        delta = 10.0
+
+        if k >= RSI_SELL and d >= RSI_SELL:
+            if 0.0 < k - d < delta:
+                buysell = SELL
+                print(f"[SELL] {price=} {k=} {d=}")
+
+        elif k <= RSI_BUY and d <= RSI_BUY:
+            if 0.0 < d - k < delta:
+                buysell = BUY
+                print(f"[BUY] {price=} {k=} {d=}")
 
     elif logic == -1:
         """
@@ -495,28 +514,35 @@ def set_ma_rsi(df):
 
 def save_gragh(df, filename):
     plt.figure(figsize=(60,10))
+    plt.xlim(df.index[0], df.index[-1])
+
+    # 利益グラフ
     plt.subplot(411)
     plt.plot(df.index, df["Profit"], label="Profit")
     plt.title("Profit Graph")
     plt.xlabel("Date")
     plt.ylabel("Profit")
+    plt.xlim(df.index[0], df.index[-1])
 
+    # ガチホ利益グラフ
+    plt.plot(df.index, df["GachihoProfit"], label="GachihoProfit")
+    plt.legend()
+
+    # 価格グラフ
     plt.subplot(412)
     plt.plot(df.index, df["Close"], label="Close")
     plt.title("Price Graph")
     plt.xlabel("Date")
     plt.ylabel("Price")
 
-    plt.subplot(411)
-    plt.plot(df.index, df["GachihoProfit"], label="GachihoProfit")
-    plt.legend()
-
-    plt.subplot(412)
+    # 売買ポイント
     buydf = df[df['BUYSELL'] == 1]
     selldf = df[df['BUYSELL'] == -1]
     plt.scatter(buydf.index, buydf['Close'], label='BUY', color='red')
     plt.scatter(selldf.index, selldf['Close'], label='SELL', color='blue')
+
     plt.legend()
+    plt.xlim(df.index[0], df.index[-1])
 
     plt.subplot(413)
     plt.plot(df.index, df['STOCHRSI_fastk'], label='STOCHRSI_k')
@@ -524,12 +550,21 @@ def save_gragh(df, filename):
     plt.legend()
     plt.xlabel("Date")
     plt.ylabel("STOCHRSI")
+    plt.xlim(df.index[0], df.index[-1])
 
     plt.subplot(414)
-    plt.plot(df.index, df['RSI'], label='RSI')
+    plt.plot(df.index, df['STOCH_slowk'], label='STOCH_slowk')
+    plt.plot(df.index, df['STOCH_slowd'], label='STOCH_slowd')
     plt.legend()
     plt.xlabel("Date")
-    plt.ylabel("RSI")
+    plt.ylabel("STOCH SLOW")
+    plt.xlim(df.index[0], df.index[-1])
+
+    # plt.subplot(414)
+    # plt.plot(df.index, df['RSI'], label='RSI')
+    # plt.legend()
+    # plt.xlabel("Date")
+    # plt.ylabel("RSI")
     # plt.plot(buydf.index, buydf['Close'], marker='o', markersize=5, label='BUY', color='red')
     # plt.plot(selldf.index, selldf['Close'], marker='o', markersize=5, label='SELL', color='blue')
 
