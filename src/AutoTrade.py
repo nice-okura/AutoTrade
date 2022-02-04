@@ -3,6 +3,7 @@ import math
 from datetime import datetime
 from datetime import timedelta
 import os
+import sys
 import pandas as pd
 import logging
 from CryptService import CryptService
@@ -443,6 +444,54 @@ def get_BUYSELLprice(yen_price, coin_price, coin, jpy, price_decision_logic=0, o
 
     return BUYSELLprice
 
+def check_minus(df):
+    minus_coin = df.query('Coin < 0')
+    minus_jpy = df.query('JPY < 0')
+
+    if len(minus_coin) != 0:
+        print(f"Error: 所持コイン数: {minus_coin['Coin'].iloc[-1]}") # iloc[-1]でSeries型の値のみ取り出す
+        sys.exit()
+
+    if len(minus_jpy) != 0:
+        print(f"Error: 所持日本円: {minus_coin['JPY'].iloc[-1]}")
+        sys.exit()
+
+def songiri(df, position_df, coin_price, coin, yen, price_decision_logic, tmp_df):
+    perc = 0.1
+    # pp(position_df)
+
+    for j, p in position_df.iterrows():
+        # print(f"{j= } {p= }")
+        # sys.exit()
+
+        # 購入ポジションがあり、現在の価格(coin_price)が購入価格(p['Close'])からperc%以上下がっている場合、売る
+        if p['BUYSELL'] == BUY and coin_price <= p['Close']*(1-perc):
+            # print(f"{df.at[j, 'BUYSELL']= }")
+            #
+            # print(f"BUY Time: {j}")
+            # print(f"BUY Time: {j}")
+            # print(f"BUY Price: {p['Close']}")
+            # print(f"NOW Price: {coin_price}")
+
+            df.at[j, 'BUYSELL'] = SELL
+
+            sell_price = get_BUYSELLprice(SELL_PRICE, coin_price, coin, yen, price_decision_logic=price_decision_logic, oneline_df=tmp_df)  # 購入する仮想通貨の枚数
+            yen += sell_price
+            # print(f"SELL Price: {sell_price}")
+
+            coin -= sell_price/coin_price
+
+            position_df = position_df.drop(j)
+
+        elif p['BUYSELL'] == SELL and coin_price >= p['Close']*(1+perc):
+            # print(f"{coin_price=} ")
+            df.at[j, 'BUYSELL'] = BUY
+
+            buy_price = get_BUYSELLprice(BUY_PRICE, coin_price, coin, yen, price_decision_logic=price_decision_logic, oneline_df=tmp_df)  # 購入する仮想通貨の枚数
+            yen -= buy_price
+            # print(f"BUY Price: {buy_price}")
+            coin += buy_price/coin_price
+            position_df = position_df.drop(j)
 
 def simulate(df, logic=0, init_yen=100000, init_coin=100, price_decision_logic=0):
     """
@@ -472,32 +521,9 @@ def simulate(df, logic=0, init_yen=100000, init_coin=100, price_decision_logic=0
 
     for i, r in df.iterrows():
         tmp_df = pd.DataFrame([r])
-
         coin_price = tmp_df['Close'][0]  # 購入する仮想通貨の現在の価格
 
         pct_chg = tmp_df['_CLOSE_PCT_CHANGE'][0]
-
-        # 損切り
-        if position_df.size != 0:
-            perc = 0.1
-
-            for i, p in position_df.iterrows():
-                print(f"{p}")
-                # 購入ポジションがあり、現在の価格(coin_price)が購入価格(p['Close'])からperc%以上下がっている場合、売る
-                if p['BUYSELL'] == BUY and coin_price <= p['Close']*(1-perc):
-                    print(f"{coin_price=} ")
-                    df.at[i, 'BUYSELL'] = SELL
-
-                    sell_price = get_BUYSELLprice(SELL_PRICE, coin_price, coin, yen, price_decision_logic=price_decision_logic, oneline_df=tmp_df)  # 購入する仮想通貨の枚数
-                    yen += sell_price
-                    coin -= sell_price/coin_price
-            #     elif p['BUYSELL'] == SELL and coin_price >= p['Close']*(1+perc):
-            #         print(f"{coin_price=} ")
-            #         df.at[i, 'BUYSELL'] = BUY
-            #
-            #         buy_price = get_BUYSELLprice(BUY_PRICE, coin_price, coin, yen, price_decision_logic=price_decision_logic, oneline_df=tmp_df)  # 購入する仮想通貨の枚数
-            #         yen -= buy_price
-            #         coin += buy_price/coin_price
 
         if buyORsell(tmp_df, logic) == BUY:
             df.at[i, 'BUYSELL'] = BUY
@@ -516,6 +542,10 @@ def simulate(df, logic=0, init_yen=100000, init_coin=100, price_decision_logic=0
             # logger.debug(f'[SELL]{tmp_df.index.strftime("%Y/%m/%d %H:%M")[0]}: SELL_PRICE: {sell_price:.2f} {coin=:.2f}')
             # logger.debug(f'   PCT_CHG:{pct_chg:.2%} coin:{coin}')
 
+        elif len(position_df) != 0:
+            # 損切り
+            songiri(df, position_df, coin_price, coin, yen, price_decision_logic, tmp_df)
+
         df.at[i, 'SimulateAsset'] = yen + coin*coin_price
         df.at[i, 'Profit'] = df.at[i, 'SimulateAsset'] - init_asset
         df.at[i, 'Coin'] = coin
@@ -523,10 +553,17 @@ def simulate(df, logic=0, init_yen=100000, init_coin=100, price_decision_logic=0
         df.at[i, 'GachihoAsset'] = init_yen + init_coin*coin_price
         df.at[i, 'GachihoProfit'] = df.at[i, 'GachihoAsset'] - init_asset
 
+        # ポジション保存
         if df.at[i, 'BUYSELL'] == BUY or df.at[i, 'BUYSELL'] == SELL:
-            # print(f"{tmp_df=}")
-            position_df = position_df.append(df.iloc[i].copy())
-            pass
+            # print(f"{len(position_df)=}")
+            position_df = position_df.append(df.loc[i])
+            # print(f"{len(position_df)=}")
+            # print(f"{position_df.info()=}")
+            # print(f"{pd.DataFrame(df.loc[i])= }")
+            # sys.exit()
+
+        check_minus(df)
+
     return df
 
 
@@ -543,11 +580,12 @@ def set_ma_rsi(df):
     return df
 
 def save_gragh(df, filename):
+    rows = 5
     plt.figure(figsize=(60,10))
     plt.xlim(df.index[0], df.index[-1])
 
     # 利益グラフ
-    plt.subplot(411)
+    plt.subplot(rows,1,1)
     plt.plot(df.index, df["Profit"], label="Profit")
     plt.title("Profit Graph")
     plt.xlabel("Date")
@@ -559,7 +597,7 @@ def save_gragh(df, filename):
     plt.legend()
 
     # 価格グラフ
-    plt.subplot(412)
+    plt.subplot(rows,1,2)
     plt.plot(df.index, df["Close"], label="Close")
     plt.title("Price Graph")
     plt.xlabel("Date")
@@ -574,7 +612,8 @@ def save_gragh(df, filename):
     plt.legend()
     plt.xlim(df.index[0], df.index[-1])
 
-    plt.subplot(413)
+    # STOCH FAST
+    plt.subplot(rows,1,3)
     plt.plot(df.index, df['STOCHRSI_fastk'], label='STOCHRSI_k')
     plt.plot(df.index, df['STOCHRSI_fastd'], label='STOCHRSI_d')
     plt.legend()
@@ -582,12 +621,21 @@ def save_gragh(df, filename):
     plt.ylabel("STOCHRSI")
     plt.xlim(df.index[0], df.index[-1])
 
-    plt.subplot(414)
+    # STOCH SLOw
+    plt.subplot(rows,1,4)
     plt.plot(df.index, df['STOCH_slowk'], label='STOCH_slowk')
     plt.plot(df.index, df['STOCH_slowd'], label='STOCH_slowd')
     plt.legend()
     plt.xlabel("Date")
     plt.ylabel("STOCH SLOW")
+    plt.xlim(df.index[0], df.index[-1])
+
+    # 所持コイン
+    plt.subplot(rows,1,5)
+    plt.plot(df.index, df['Coin'], label='COIN')
+    plt.legend()
+    plt.xlabel("Date")
+    plt.ylabel("Coin")
     plt.xlim(df.index[0], df.index[-1])
 
     # plt.subplot(414)
@@ -863,7 +911,7 @@ def main():
         logic = 2
         init_yen = 100000
         init_coin = 100
-        price_decision_logic = -1
+        price_decision_logic = 0
 
         # コマンドライン引数からパラメータ取得
         if args.logic is not None:
