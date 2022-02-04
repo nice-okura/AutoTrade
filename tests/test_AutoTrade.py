@@ -280,7 +280,7 @@ def test_simulate_20210401_0404_logic0(get_data_20210401_0404_fixture):
     logic = 0
     df = get_data_20210401_0404_fixture['df']
     df['ma_diff'], df['GCDC_times'] = get_madata(df)
-    df['rsi'] = get_rsi(df)
+    df['RSI'] = get_rsi(df)
     sim_df = simulate(df, logic, init_yen=100000, init_coin=100, price_decision_logic=0)
 
     assert sim_df['Coin'][-1] == 100.67201231804299
@@ -292,7 +292,7 @@ def test_simulate_20210401_0404_logic1(get_data_20210401_0404_fixture):
     logic = 1
     df = get_data_20210401_0404_fixture['df']
     df['ma_diff'], df['GCDC_times'] = get_madata(df)
-    df['rsi'] = get_rsi(df)
+    df['RSI'] = get_rsi(df)
     sim_df = simulate(df, logic, init_yen=100000, init_coin=100, price_decision_logic=0)
 
     assert sim_df['Coin'][-1] == 100.67201231804299
