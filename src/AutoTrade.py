@@ -305,6 +305,7 @@ def buyORsell(df, logic=0):
                 buysell = BUY
             elif (is_gcdc(df, MA_times) and gcdc == "DC") or buysell_by_rsi(df) == SELL:
                 buysell = SELL
+
     elif logic == 1:
         """
         売り買いロジック③：
@@ -314,6 +315,7 @@ def buyORsell(df, logic=0):
             buysell = BUY
         elif is_gcdc(df, MA_times) and gcdc == "DC":
             buysell = SELL
+
     elif logic == 2:
         """
         売り買いロジック⑪：
@@ -354,12 +356,12 @@ def buyORsell(df, logic=0):
         if k >= RSI_SELL and d >= RSI_SELL:
             if 0.0 < k - d < delta:
                 buysell = SELL
-                print(f"[SELL] {price=} {k=} {d=}")
+                # print(f"[SELL] {price=} {k=} {d=}")
 
         elif k <= RSI_BUY and d <= RSI_BUY:
             if 0.0 < d - k < delta:
                 buysell = BUY
-                print(f"[BUY] {price=} {k=} {d=}")
+                # print(f"[BUY] {price=} {k=} {d=}")
 
     elif logic == -1:
         """
@@ -466,12 +468,36 @@ def simulate(df, logic=0, init_yen=100000, init_coin=100, price_decision_logic=0
     df['Coin'] = init_coin        # 所持仮想通貨数　index 11
     df['JPY'] = init_yen
 
+    position_df = pd.DataFrame()
+
     for i, r in df.iterrows():
         tmp_df = pd.DataFrame([r])
 
         coin_price = tmp_df['Close'][0]  # 購入する仮想通貨の現在の価格
 
         pct_chg = tmp_df['_CLOSE_PCT_CHANGE'][0]
+
+        # 損切り
+        if position_df.size != 0:
+            perc = 0.1
+
+            for i, p in position_df.iterrows():
+                print(f"{p}")
+                # 購入ポジションがあり、現在の価格(coin_price)が購入価格(p['Close'])からperc%以上下がっている場合、売る
+                if p['BUYSELL'] == BUY and coin_price <= p['Close']*(1-perc):
+                    print(f"{coin_price=} ")
+                    df.at[i, 'BUYSELL'] = SELL
+
+                    sell_price = get_BUYSELLprice(SELL_PRICE, coin_price, coin, yen, price_decision_logic=price_decision_logic, oneline_df=tmp_df)  # 購入する仮想通貨の枚数
+                    yen += sell_price
+                    coin -= sell_price/coin_price
+            #     elif p['BUYSELL'] == SELL and coin_price >= p['Close']*(1+perc):
+            #         print(f"{coin_price=} ")
+            #         df.at[i, 'BUYSELL'] = BUY
+            #
+            #         buy_price = get_BUYSELLprice(BUY_PRICE, coin_price, coin, yen, price_decision_logic=price_decision_logic, oneline_df=tmp_df)  # 購入する仮想通貨の枚数
+            #         yen -= buy_price
+            #         coin += buy_price/coin_price
 
         if buyORsell(tmp_df, logic) == BUY:
             df.at[i, 'BUYSELL'] = BUY
@@ -481,9 +507,9 @@ def simulate(df, logic=0, init_yen=100000, init_coin=100, price_decision_logic=0
             coin += buy_price/coin_price
             # logger.debug(f'[BUY]{tmp_df.index.strftime("%Y/%m/%d %H:%M")[0]}: BUY_PRICE: {buy_price:.2f} {coin=:.2f}')
             # logger.debug(f'   PCT_CHG:{pct_chg:.2%} jpy:{yen}')
-
         elif buyORsell(tmp_df, logic) == SELL:
             df.at[i, 'BUYSELL'] = SELL
+
             sell_price = get_BUYSELLprice(SELL_PRICE, coin_price, coin, yen, price_decision_logic=price_decision_logic, oneline_df=tmp_df)  # 購入する仮想通貨の枚数
             yen += sell_price
             coin -= sell_price/coin_price
@@ -497,6 +523,10 @@ def simulate(df, logic=0, init_yen=100000, init_coin=100, price_decision_logic=0
         df.at[i, 'GachihoAsset'] = init_yen + init_coin*coin_price
         df.at[i, 'GachihoProfit'] = df.at[i, 'GachihoAsset'] - init_asset
 
+        if df.at[i, 'BUYSELL'] == BUY or df.at[i, 'BUYSELL'] == SELL:
+            # print(f"{tmp_df=}")
+            position_df = position_df.append(df.iloc[i].copy())
+            pass
     return df
 
 
