@@ -1,4 +1,4 @@
-from AutoTrade import AutoTrade, Parameter
+from AutoTrade import AutoTrade, Parameter, BUY, SELL
 import pytest
 from datetime import datetime, timedelta
 import pandas as pd
@@ -47,61 +47,62 @@ class TestAutoTrade:
         self.at = AutoTrade(param)
         yield
 
+    @pytest.fixture(scope='class', autouse=True)
+    def get_madata_times1_fixture(self):
+        test_df = self.load_csv2pd('tests/test_df_times1.csv')
+        yield({'df': test_df})
+
+
     # @pytest.fixture(scope='function', autouse=True)
-    # def get_madata_times1_fixture(self):
-    #     test_df = load_csv2pd('tests/test_df_times1.csv')
-    #     yield({'df': test_df})
-    #
-    #
-    @pytest.fixture(scope='function', autouse=True)
+    @pytest.fixture(scope='class')
     def get_madata_times81_fixture(self):
         print("get_madata_times81_fixture()")
         test_df = self.load_csv2pd('tests/test_df_times81.csv')
         yield({'df': test_df})
-    #
-    #
-    # @pytest.fixture(scope='function', autouse=True)
-    # def get_madata_gcdc1_fixture(self):
-    #     test_df = load_csv2pd('tests/test_df_gcdc1.csv')
-    #     yield({'df': test_df})
-    #
-    #
-    # @pytest.fixture(scope='function', autouse=True)
-    # def get_madata_gcdc81_fixture(self):
-    #     print("### get_madata_gcdc81_fixture ###")
-    #     test_df = load_csv2pd('tests/test_df_gcdc81.csv')
-    #
-    #     yield({'df': test_df})
-    #
-    #
-    # @pytest.fixture(scope='function', autouse=True)
-    # def get_madata_rsiover80_fixture(self):
-    #     print("### get_madata_rsiover80_fixture ###")
-    #     test_df = load_csv2pd('tests/test_df_rsiover80.csv')
-    #
-    #     yield({'df': test_df})
-    #
-    #
-    # @pytest.fixture(scope='function', autouse=True)
-    # def get_madata_rsiunder20_fixture(self):
-    #     print("### get_madata_rsiunder20_fixture ###")
-    #     test_df = load_csv2pd('tests/test_df_rsiunder20.csv')
-    #
-    #     yield({'df': test_df})
-    #
-    # @pytest.fixture(scope='function', autouse=True)
-    # def get_data_20210401_0404_fixture(self):
-    #     print("### get_data_20210401_0404_fixture ###")
-    #     test_df = load_csv2pd('tests/data_20210401-0404.csv')
-    #
-    #     yield({'df': test_df})
-    #
-    # @pytest.fixture(scope='function', autouse=True)
-    # def get_test_df_result_fixture(self):
-    #     print("### get_test_df_result_fixture ###")
-    #     test_df = load_csv2pd('tests/test_df_result.csv')
-    #
-    #     yield({'df': test_df})
+
+
+    @pytest.fixture(scope='class', autouse=True)
+    def get_madata_gcdc1_fixture(self):
+        test_df = self.load_csv2pd('tests/test_df_gcdc1.csv')
+        yield({'df': test_df})
+
+
+    @pytest.fixture(scope='class', autouse=True)
+    def get_madata_gcdc81_fixture(self):
+        print("### get_madata_gcdc81_fixture ###")
+        test_df = self.load_csv2pd('tests/test_df_gcdc81.csv')
+
+        yield({'df': test_df})
+
+
+    @pytest.fixture(scope='class', autouse=True)
+    def get_madata_rsiover80_fixture(self):
+        print("### get_madata_rsiover80_fixture ###")
+        test_df = self.load_csv2pd('tests/test_df_rsiover80.csv')
+
+        yield({'df': test_df})
+
+
+    @pytest.fixture(scope='class', autouse=True)
+    def get_madata_rsiunder20_fixture(self):
+        print("### get_madata_rsiunder20_fixture ###")
+        test_df = self.load_csv2pd('tests/test_df_rsiunder20.csv')
+
+        yield({'df': test_df})
+
+    @pytest.fixture(scope='class', autouse=True)
+    def get_data_20210401_0404_fixture(self):
+        print("### get_data_20210401_0404_fixture ###")
+        test_df = self.load_csv2pd('tests/data_20210401-0404.csv')
+
+        yield({'df': test_df})
+
+    @pytest.fixture(scope='class', autouse=True)
+    def get_test_df_result_fixture(self):
+        print("### get_test_df_result_fixture ###")
+        test_df = self.load_csv2pd('tests/test_df_result.csv')
+
+        yield({'df': test_df})
 
     """
 
@@ -167,23 +168,23 @@ class TestAutoTrade:
 
         assert ma_diff.iloc()[-1] == 50.50217999999984
 
-    def test_get_rsi_01(self, get_madata_times81_fixture):
-        """
-        rsiが77.22267757450163となる
-        """
-        df = get_madata_times81_fixture['df']
-        rsi = self.at.get_rsi(df)
-
-        assert rsi.iloc()[-1] == 77.22267757450163
-
-    def test_get_rsi_02(self, get_madata_times1_fixture):
-        """
-        rsiが69.09899987493397となる
-        """
-        df = get_madata_times1_fixture['df']
-        rsi = self.at.get_rsi(df)
-
-        assert rsi.iloc()[-1] == 69.09899987493397
+    # def test_get_rsi_01(self, get_madata_times81_fixture):
+    #     """
+    #     rsiが77.22267757450163となる
+    #     """
+    #     df = get_madata_times81_fixture['df']
+    #     rsi = self.at.get_rsi(df)
+    #
+    #     assert rsi.iloc()[-1] == 77.22267757450163
+    #
+    # def test_get_rsi_02(self, get_madata_times1_fixture):
+    #     """
+    #     rsiが69.09899987493397となる
+    #     """
+    #     df = get_madata_times1_fixture['df']
+    #     rsi = self.at.get_rsi(df)
+    #
+    #     assert rsi.iloc()[-1] == 69.09899987493397
 
     def test_is_gcdc(self, get_madata_gcdc81_fixture):
         """
@@ -225,18 +226,24 @@ class TestAutoTrade:
 
         assert self.at.buysell_by_rsi(df) == 0
 
-    def test_buysell_by_vol(self, get_madata_gcdc1_fixture):
+    def test_buysell_by_vol_1(self, get_madata_gcdc1_fixture):
         """
         VOLが低いの取引しない
         """
+        param = Parameter(vol_order=50000)
+        self.at = AutoTrade(param)
+
         df = get_madata_gcdc1_fixture['df']
 
         assert not self.at.buysell_by_vol(df)
 
-    def test_buysell_by_vol(self, get_madata_gcdc81_fixture):
+    def test_buysell_by_vol_2(self, get_madata_gcdc81_fixture):
         """
         VOLが十分なので取引する
         """
+        param = Parameter(vol_order=50000)
+        self.at = AutoTrade(param)
+
         df = get_madata_gcdc81_fixture['df']
 
         assert self.at.buysell_by_vol(df)
@@ -265,31 +272,36 @@ class TestAutoTrade:
     def test_simulate_20210401_0404_logic0(self, get_data_20210401_0404_fixture):
         logic = 0
         df = get_data_20210401_0404_fixture['df']
+        df = self.at.calc_features(df)
         df['ma_diff'], df['GCDC_times'] = self.at.get_madata(df)
-        df['RSI'] = self.at.get_rsi(df)
+        # df['RSI'] = self.at.get_rsi(df)
         sim_df = self.at.simulate(df, logic, init_yen=100000, init_coin=100, price_decision_logic=0)
 
-        assert sim_df['Coin'][-1] == 100.67201231804299
-        assert sim_df['Profit'][-1] == 3663.809318778862
-        assert sim_df['SimulateAsset'][-1] == 217204.20931877886
+        assert sim_df['Coin'][-1] == 100
+        assert sim_df['Profit'][-1] == 3653.634694403416
+        assert sim_df['SimulateAsset'][-1] == 217194.0346944034
 
 
     def test_simulate_20210401_0404_logic1(self, get_data_20210401_0404_fixture):
         logic = 1
         df = get_data_20210401_0404_fixture['df']
+        df = self.at.calc_features(df)
         df['ma_diff'], df['GCDC_times'] = self.at.get_madata(df)
-        df['RSI'] = self.at.get_rsi(df)
+        # df['RSI'] = self.at.get_rsi(df)
         sim_df = self.at.simulate(df, logic, init_yen=100000, init_coin=100, price_decision_logic=0)
 
-        assert sim_df['Coin'][-1] == 100.67201231804299
-        assert sim_df['Profit'][-1] == 3663.809318778862
-        assert sim_df['SimulateAsset'][-1] == 217204.20931877886
+        assert sim_df['Coin'][-1] == 100
+        assert sim_df['Profit'][-1] == 3653.634694403416
+        assert sim_df['SimulateAsset'][-1] == 217194.0346944034
 
     def test_get_BUYSELLprice_mode0(self):
         yen_price = 100
         coin_price = 20
+        coin = 100
+        yen = 10000
         mode = 0
-        assert self.at.get_BUYSELLprice(yen_price, coin_price, 0, 0, mode) == 100
+
+        assert self.at.get_BUYSELLprice(yen_price, coin_price, coin, yen, mode) == 100
 
 
     def test_get_BUYSELLprice_mode1(self, get_madata_gcdc81_fixture):
@@ -298,11 +310,7 @@ class TestAutoTrade:
         yen_price = 100
         coin_price = 20
         coin = 100
-        jpy = 10000
+        yen = 10000
         mode = 1
 
         assert self.at.get_BUYSELLprice(yen_price, coin_price, coin, yen, mode, oneline_df) == 405
-
-    def test_save_graph(self, get_test_df_result_fixture):
-        df = get_test_df_result_fixture['df']
-        self.at.save_gragh(df, "test_df_result.png")

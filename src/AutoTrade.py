@@ -286,7 +286,7 @@ class AutoTrade:
         if order_result['success'] == 1:
             # オーダー成功
             price = order_result['data']['start_amount']
-            self.logger.info(PAIR + "を" + str(price_yen) + "円で" + str(price) + order_str)
+            self.logger.info(self.param.PAIR + "を" + str(price_yen) + "円で" + str(price) + order_str)
 
             return price
         else:
