@@ -485,16 +485,44 @@ class AutoTrade:
             sys.exit()
 
     def songiri(self, df, position_df, coin_price, coin, yen, price_decision_logic, tmp_df):
+        """ 今の価格にて、これまでの売り買いポジションから、perc%以上の損失が出ている場合、
+            ポジションを解放（売りポジなら買い、買いポジなら売り）する
+
+        Paramters
+        ------------
+        df : DataFrame : これまでの価格情報
+        position_df : DataFrame : ポジションリスト
+        coin_price : float : 現在のコインの価格
+        coin : float : 所持コイン数
+        yen : float : 所持日本円
+        price_decision_logic : int : 売買価格決定ロジック
+        tmp_df : DataFrame : 最新の価格情報
+
+        Return
+        ------------
+        df : DataFrame : 損切した場合の売り買い情報が反映されたdef
+        position_df : DataFrame : ポジション解放を反映させたもの
+        """
         perc = 0.1
+        i = tmp_df.index[0]
+        print(f"tmp_df  Date: {i.strftime('%Y/%m/%d %H:%M:%S')} coin_price:{coin_price}")
+
         # pp(position_df)
 
         for j, p in position_df.iterrows():
-            # print(f"{j= } {p= }")
+            """
+             j: 当時売買した日時
+            """
+            # if p['BUYSELL'] == BUY:
+            #     print(f"position BUY  Date: {j.strftime('%Y/%m/%d %H:%M:%S')} Close:{p['Close']} border:{p['Close']*(1-perc)}")
+            # elif p['BUYSELL'] == SELL:
+            #     print(f"position SELL  Date: {j.strftime('%Y/%m/%d %H:%M:%S')} Close:{p['Close']} border:{p['Close']*(1+perc)}")
             # sys.exit()
 
             # 購入ポジションがあり、現在の価格(coin_price)が購入価格(p['Close'])からperc%以上下がっている場合、売る
             if p['BUYSELL'] == BUY and coin_price <= p['Close']*(1-perc):
-                print(f"{p['Close']=}")
+                print(f"  {p.name.strftime('%Y/%m/%d %H:%M:%S')}に{p['Close']}円で買ったものを{i}に{coin_price}で売る")
+
                 # print(f"{df.at[j, 'BUYSELL']= }")
                 #
                 # print(f"BUY Time: {j}")
@@ -502,27 +530,31 @@ class AutoTrade:
                 # print(f"BUY Price: {p['Close']}")
                 # print(f"NOW Price: {coin_price}")
 
-                df.at[j, 'BUYSELL'] = SELL
+                df.at[i, 'BUYSELL'] = SELL
 
                 sell_price = self.get_BUYSELLprice(self.param.SELL_PRICE, coin_price, coin, yen, price_decision_logic=price_decision_logic, oneline_df=tmp_df)  # 購入する仮想通貨の枚数
                 yen += sell_price
-                # print(f"SELL Price: {sell_price}")
+                # print(f"  SELL Price: {sell_price}")
 
                 coin -= sell_price/coin_price
 
                 position_df = position_df.drop(j)
+                break
 
             elif p['BUYSELL'] == SELL and coin_price >= p['Close']*(1+perc):
-                print(f"{p['Close']=}")
+                print(f"  {p.name.strftime('%Y/%m/%d %H:%M:%S')}に{p['Close']}円で売ったものを{i}に{coin_price}で買う")
+
                 # print(f"{coin_price=} ")
-                df.at[j, 'BUYSELL'] = BUY
+                df.at[i, 'BUYSELL'] = BUY
 
                 buy_price = self.get_BUYSELLprice(self.param.BUY_PRICE, coin_price, coin, yen, price_decision_logic=price_decision_logic, oneline_df=tmp_df)  # 購入する仮想通貨の枚数
+                print(f"  BUY Price: {buy_price}")
                 yen -= buy_price
-                # print(f"BUY Price: {buy_price}")
                 coin += buy_price/coin_price
                 position_df = position_df.drop(j)
+                break
 
+        return df, position_df, coin, yen
 
     def simulate(self, df, logic=0, init_yen=100000, init_coin=100, price_decision_logic=0):
         """
@@ -555,6 +587,7 @@ class AutoTrade:
             coin_price = tmp_df['Close'][0]  # 購入する仮想通貨の現在の価格
 
             pct_chg = tmp_df['_CLOSE_PCT_CHANGE'][0]
+            # print(f"Date: {i.strftime('%Y/%m/%d %H:%M:%S')} Close:{r['Close']}")
 
             if self.buyORsell(tmp_df, logic) == BUY:
                 df.at[i, 'BUYSELL'] = BUY
@@ -575,7 +608,8 @@ class AutoTrade:
 
             elif len(position_df) != 0:
                 # 損切り
-                self.songiri(df, position_df, coin_price, coin, yen, price_decision_logic, tmp_df)
+                pass
+                df, position_df, coin, yen = self.songiri(df, position_df, coin_price, coin, yen, price_decision_logic, tmp_df)
 
             df.at[i, 'SimulateAsset'] = yen + coin*coin_price
             df.at[i, 'Profit'] = df.at[i, 'SimulateAsset'] - init_asset
@@ -586,7 +620,7 @@ class AutoTrade:
 
             # ポジション保存
             if df.at[i, 'BUYSELL'] == BUY or df.at[i, 'BUYSELL'] == SELL:
-                # print(f"{len(position_df)=}")
+                print(f"★売り買い：{df.at[i, 'BUYSELL']} 時刻：{i} 価格：{df.at[i, 'Close']}")
                 position_df = position_df.append(df.loc[i])
                 # print(f"{len(position_df)=}")
                 # print(f"{position_df.info()=}")

@@ -107,8 +107,8 @@ class TestAutoTrade:
     @pytest.fixture(scope='class', autouse=True)
     def get_test_songiri_30days(self):
         print("### get_test_songiri_30days_fixture ###")
-        df = self.load_csv2pd('tests/test_songiri_30days.csv')
-        position_df = self.load_csv2pd('tests/test_songiri_30days_position.csv')
+        df = self.load_csv2pd('tests/test_songiri_3days.csv')
+        position_df = self.load_csv2pd('tests/test_songiri_3days_position.csv')
 
         yield({'df': df, 'position_df': position_df})
 
@@ -323,16 +323,23 @@ class TestAutoTrade:
 
         assert self.at.get_BUYSELLprice(yen_price, coin_price, coin, yen, mode, oneline_df) == 405
 
+    @pytest.mark.this
     def test_songiri(self, get_test_songiri_30days):
         df = get_test_songiri_30days['df']
         position_df = get_test_songiri_30days['position_df']
         tmp_df = df.iloc[-1:]
-        yen_price = 100
-        coin_price = 20
-        coin = 100
-        yen = 10000
+        coin_price = tmp_df['Close'][0]
+        init_coin = 100
+        coin = init_coin
+        init_yen = 10000
+        yen = init_yen
         price_decision_logic = 0
 
-        print(f"{len(position_df)=}")
-        self.at.songiri(df, position_df, coin_price, coin, yen, price_decision_logic, tmp_df)
-        print(f"{len(position_df)=}")
+        df, position_df, coin, yen = self.at.songiri(df, position_df, coin_price, coin, yen, price_decision_logic, tmp_df)
+        assert len(position_df) == 8
+        assert yen == init_yen - self.at.param.BUY_PRICE
+        assert coin == init_coin + self.at.param.BUY_PRICE/coin_price
+
+    def test_songiri_simulate(self, get_test_songiri_30days):
+        df = get_test_songiri_30days['df']
+        sim_df = self.at.simulate(df, logic=1, init_yen=100000, init_coin=100, price_decision_logic=0)
