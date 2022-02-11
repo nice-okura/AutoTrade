@@ -104,6 +104,14 @@ class TestAutoTrade:
 
         yield({'df': test_df})
 
+    @pytest.fixture(scope='class', autouse=True)
+    def get_test_songiri_30days(self):
+        print("### get_test_songiri_30days_fixture ###")
+        df = self.load_csv2pd('tests/test_songiri_30days.csv')
+        position_df = self.load_csv2pd('tests/test_songiri_30days_position.csv')
+
+        yield({'df': df, 'position_df': position_df})
+
     """
 
       *******************
@@ -314,3 +322,17 @@ class TestAutoTrade:
         mode = 1
 
         assert self.at.get_BUYSELLprice(yen_price, coin_price, coin, yen, mode, oneline_df) == 405
+
+    def test_songiri(self, get_test_songiri_30days):
+        df = get_test_songiri_30days['df']
+        position_df = get_test_songiri_30days['position_df']
+        tmp_df = df.iloc[-1:]
+        yen_price = 100
+        coin_price = 20
+        coin = 100
+        yen = 10000
+        price_decision_logic = 0
+
+        print(f"{len(position_df)=}")
+        self.at.songiri(df, position_df, coin_price, coin, yen, price_decision_logic, tmp_df)
+        print(f"{len(position_df)=}")

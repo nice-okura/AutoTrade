@@ -494,6 +494,7 @@ class AutoTrade:
 
             # 購入ポジションがあり、現在の価格(coin_price)が購入価格(p['Close'])からperc%以上下がっている場合、売る
             if p['BUYSELL'] == BUY and coin_price <= p['Close']*(1-perc):
+                print(f"{p['Close']=}")
                 # print(f"{df.at[j, 'BUYSELL']= }")
                 #
                 # print(f"BUY Time: {j}")
@@ -512,6 +513,7 @@ class AutoTrade:
                 position_df = position_df.drop(j)
 
             elif p['BUYSELL'] == SELL and coin_price >= p['Close']*(1+perc):
+                print(f"{p['Close']=}")
                 # print(f"{coin_price=} ")
                 df.at[j, 'BUYSELL'] = BUY
 
