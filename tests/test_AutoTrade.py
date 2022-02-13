@@ -343,3 +343,9 @@ class TestAutoTrade:
     def test_songiri_simulate(self, get_test_songiri_30days):
         df = get_test_songiri_30days['df']
         sim_df = self.at.simulate(df, logic=1, init_yen=100000, init_coin=100, price_decision_logic=0)
+
+    def test_simulate_logic10(self, get_test_songiri_30days):
+        logic = 10
+        df = get_test_songiri_30days['df']
+        # df['RSI'] = self.at.get_rsi(df)
+        sim_df = self.at.simulate(df, logic, init_yen=100000, init_coin=100, price_decision_logic=0)

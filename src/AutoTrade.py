@@ -390,6 +390,17 @@ class AutoTrade:
                 if 0.0 < d - k < delta:
                     buysell = BUY
                     # print(f"[BUY] {price=} {k=} {d=}")
+        elif logic == 10:
+            """
+            XRP円平均法で定期的に購入する
+            """
+            hour = int(df.index[-1].strftime('%H'))
+
+            if hour == 0 or hour == 12:
+                """
+                0時または12時の時に購入
+                """
+                buysell = BUY
 
         elif logic == -1:
             """
@@ -454,7 +465,6 @@ class AutoTrade:
             elif ma_diff > 0:
                 # 買い
                 BUYSELLprice = jpy*weight
-
         elif price_decision_logic == -1:
             """
             n単位時間後の価格変化率(pct_chg)から売り買い価格を決める
@@ -557,6 +567,7 @@ class AutoTrade:
         return df, position_df, coin, yen
 
     def simulate(self, df, logic=0, init_yen=100000, init_coin=100, price_decision_logic=0):
+        # self.logger.debug("## simulate ")
         """
             過去データ(df)から実際に売買した場合の総資産や利益を計算し、dfに追加して返す
 
@@ -606,8 +617,9 @@ class AutoTrade:
                 #self.logger.debug(f'[SELL]{tmp_df.index.strftime("%Y/%m/%d %H:%M")[0]}: SELL_PRICE: {sell_price:.2f} {coin=:.2f}')
                 #self.logger.debug(f'   PCT_CHG:{pct_chg:.2%} coin:{coin}')
 
-            elif len(position_df) != 0:
+            elif len(position_df) != 0 and logic != 10:
                 # 損切り
+                # 積み立ての時は実施損切しない
                 pass
                 df, position_df, coin, yen = self.songiri(df, position_df, coin_price, coin, yen, price_decision_logic, tmp_df)
 
