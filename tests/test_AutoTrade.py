@@ -105,13 +105,20 @@ class TestAutoTrade:
         yield({'df': test_df})
 
     @pytest.fixture(scope='class', autouse=True)
-    def get_test_songiri_30days(self):
-        print("### get_test_songiri_30days_fixture ###")
+    def get_test_songiri_7days(self):
+        print("### get_test_songiri_57ays_fixture ###")
+        df = self.load_csv2pd('tests/test_songiri_7days.csv')
+        position_df = self.load_csv2pd('tests/test_songiri_7days_position.csv')
+
+        yield({'df': df, 'position_df': position_df})
+
+    @pytest.fixture(scope='class', autouse=True)
+    def get_test_songiri_3days(self):
+        print("### get_test_songiri_3days_fixture ###")
         df = self.load_csv2pd('tests/test_songiri_3days.csv')
         position_df = self.load_csv2pd('tests/test_songiri_3days_position.csv')
 
         yield({'df': df, 'position_df': position_df})
-
     """
 
       *******************
@@ -339,6 +346,23 @@ class TestAutoTrade:
         assert len(position_df) == 8
         assert yen == init_yen - self.at.param.BUY_PRICE
         assert coin == init_coin + self.at.param.BUY_PRICE/coin_price
+
+    def test_songiri_3days(self, get_test_songiri_3days):
+        df = get_test_songiri_3days['df']
+        position_df = get_test_songiri_3days['position_df']
+        tmp_df = df.iloc[-1:]
+        coin_price = tmp_df['Close'][0]
+        init_coin = 100
+        coin = init_coin
+        init_yen = 100000
+        yen = init_yen
+        price_decision_logic = 0
+
+        df, position_df, coin, yen = self.at.songiri(df, position_df, coin_price, coin, yen, price_decision_logic, tmp_df)
+        assert len(position_df) == 0
+        
+        # assert yen == init_yen - self.at.param.BUY_PRICE
+        # assert coin == init_coin + self.at.param.BUY_PRICE/coin_price
 
     def test_songiri_simulate(self, get_test_songiri_30days):
         df = get_test_songiri_30days['df']
