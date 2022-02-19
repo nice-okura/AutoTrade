@@ -48,6 +48,9 @@ class Parameter:
       self.RSI_BUY = rsi_buy # 買いRSIボーダー
       self.VOL_ORDER = vol_order  # 取引する基準となる取引量(Volume)
       self.WEIGHT_OF_PRICE = weight_of_price
+      self.LOGIC = logic # 売り買いロジック
+      self.PDL = price_decision_logic # 売買価格決定ロジック
+      self.SONGIRI = songiri # 損切実施するかどうか(True: 損切する, False: 損切しない)
 
 
 class AutoTrade:
@@ -302,7 +305,7 @@ class AutoTrade:
         return -1
 
 
-    def buyORsell(self, df, logic=0):
+    def buyORsell(self, df):
         """売りか買いか判定
 
         Parameters
@@ -320,6 +323,7 @@ class AutoTrade:
             0 : ステイ
         """
         buysell = 0
+        logic = self.param.LOGIC
 
         if 'ma_diff' in df.columns:
             gcdc = "GC" if df['ma_diff'][-1] >= 0 else "DC"
@@ -440,10 +444,17 @@ class AutoTrade:
         self.logger.info("\n" + str(df.tail(100)))
 
 
-    def get_BUYSELLprice(self, yen_price, coin_price, coin, jpy, price_decision_logic=0, oneline_df=None):
+    def get_BUYSELLprice(self, yen_price, coin_price, coin, jpy, oneline_df=None):
+        """ 売買価格を決める
+
+        """
         BUYSELLprice = 0.0
+        price_decision_logic = self.param.PDL
 
         if price_decision_logic == 0:
+            """
+            パラメータで設定した価格で一律売買（重みづけなどなし）
+            """
             BUYSELLprice = yen_price
 
         elif price_decision_logic == 1 and oneline_df is not None:
@@ -451,6 +462,7 @@ class AutoTrade:
             連続GC/DC回数と、WEIGHT_OF_PRICE(重み付け)から売り買い価格を決める
             """
             BUYSELLprice = yen_price * oneline_df['GCDC_times'][0] * self.param.WEIGHT_OF_PRICE
+            print("")
             # BUYSELLprice = yen_price * np.log10(oneline_df['GCDC_times'][0])
         elif price_decision_logic == 2 and oneline_df is not None:
             """
@@ -497,7 +509,7 @@ class AutoTrade:
             print(f"Error: 所持日本円: {minus_coin['JPY'].iloc[-1]}")
             sys.exit()
 
-    def songiri(self, df, position_df, coin_price, coin, yen, price_decision_logic, tmp_df):
+    def songiri(self, df, position_df, coin_price, coin, yen, tmp_df):
         """ 今の価格にて、これまでの売り買いポジションから、perc%以上の損失が出ている場合、
             ポジションを解放（売りポジなら買い、買いポジなら売り）する
 
@@ -518,7 +530,7 @@ class AutoTrade:
         """
         perc = 0.1
         i = tmp_df.index[0]
-        print(f"tmp_df  Date: {i.strftime('%Y/%m/%d %H:%M:%S')} coin_price:{coin_price}")
+        # print(f"tmp_df  Date: {i.strftime('%Y/%m/%d %H:%M:%S')} coin_price:{coin_price}")
 
         # pp(position_df)
 
@@ -532,7 +544,7 @@ class AutoTrade:
             #     print(f"position SELL  Date: {j.strftime('%Y/%m/%d %H:%M:%S')} Close:{p['Close']} border:{p['Close']*(1+perc)}")
             # sys.exit()
 
-            print(f"border: {p['Close']*(1+perc)}")
+            # print(f"border: {p['Close']*(1+perc)}")
             # 購入ポジションがあり、現在の価格(coin_price)が購入価格(p['Close'])からperc%以上下がっている場合、売る
             if p['BUYSELL'] == BUY and coin_price <= p['Close']*(1-perc):
                 print(f"  {p.name.strftime('%Y/%m/%d %H:%M:%S')}に{p['Close']}円で買ったものを{i}に{coin_price}で売る")
@@ -543,8 +555,7 @@ class AutoTrade:
                 # print(f"BUY Price: {p['Close']}")
                 # print(f"NOW Price: {coin_price}")
 
-
-                sell_price = self.get_BUYSELLprice(self.param.SELL_PRICE, coin_price, coin, yen, price_decision_logic=price_decision_logic, oneline_df=tmp_df)  # 購入する仮想通貨の枚数
+                sell_price = self.get_BUYSELLprice(self.param.SELL_PRICE, coin_price, coin, yen, oneline_df=tmp_df)  # 購入する仮想通貨の枚数
                 yen += sell_price
                 # print(f"  SELL Price: {sell_price}")
 
@@ -559,7 +570,7 @@ class AutoTrade:
                 # print(f"{coin_price=} ")
                 df.at[i, 'BUYSELL'] = BUY
 
-                buy_price = self.get_BUYSELLprice(self.param.BUY_PRICE, coin_price, coin, yen, price_decision_logic=price_decision_logic, oneline_df=tmp_df)  # 購入する仮想通貨の枚数
+                buy_price = self.get_BUYSELLprice(self.param.BUY_PRICE, coin_price, coin, yen, oneline_df=tmp_df)  # 購入する仮想通貨の枚数
                 print(f"  BUY Price: {buy_price}")
                 yen -= buy_price
                 coin += buy_price/coin_price
@@ -568,7 +579,7 @@ class AutoTrade:
 
         return df, position_df, coin, yen
 
-    def simulate(self, df, logic=0, init_yen=100000, init_coin=100, price_decision_logic=0):
+    def simulate(self, df, init_yen=100000, init_coin=100):
         # self.logger.debug("## simulate ")
         """
             過去データ(df)から実際に売買した場合の総資産や利益を計算し、dfに追加して返す
@@ -593,6 +604,8 @@ class AutoTrade:
         df['Coin'] = init_coin        # 所持仮想通貨数　index 11
         df['JPY'] = init_yen
 
+        logic = self.param.LOGIC
+
         position_df = pd.DataFrame()
 
         for i, r in df.iterrows():
@@ -602,28 +615,28 @@ class AutoTrade:
             pct_chg = tmp_df['_CLOSE_PCT_CHANGE'][0]
             # print(f"Date: {i.strftime('%Y/%m/%d %H:%M:%S')} Close:{r['Close']}")
 
-            if self.buyORsell(tmp_df, logic) == BUY:
+            if self.buyORsell(tmp_df) == BUY:
                 df.at[i, 'BUYSELL'] = BUY
 
-                buy_price = self.get_BUYSELLprice(self.param.BUY_PRICE, coin_price, coin, yen, price_decision_logic=price_decision_logic, oneline_df=tmp_df)  # 購入する仮想通貨の枚数
+                buy_price = self.get_BUYSELLprice(self.param.BUY_PRICE, coin_price, coin, yen, oneline_df=tmp_df)  # 購入する仮想通貨の枚数
                 yen -= buy_price
                 coin += buy_price/coin_price
                 #self.logger.debug(f'[BUY]{tmp_df.index.strftime("%Y/%m/%d %H:%M")[0]}: BUY_PRICE: {buy_price:.2f} {coin=:.2f}')
                 #self.logger.debug(f'   PCT_CHG:{pct_chg:.2%} jpy:{yen}')
-            elif self.buyORsell(tmp_df, logic) == SELL:
+            elif self.buyORsell(tmp_df) == SELL:
                 df.at[i, 'BUYSELL'] = SELL
 
-                sell_price = self.get_BUYSELLprice(self.param.SELL_PRICE, coin_price, coin, yen, price_decision_logic=price_decision_logic, oneline_df=tmp_df)  # 購入する仮想通貨の枚数
+                sell_price = self.get_BUYSELLprice(self.param.SELL_PRICE, coin_price, coin, yen, oneline_df=tmp_df)  # 購入する仮想通貨の枚数
                 yen += sell_price
                 coin -= sell_price/coin_price
                 #self.logger.debug(f'[SELL]{tmp_df.index.strftime("%Y/%m/%d %H:%M")[0]}: SELL_PRICE: {sell_price:.2f} {coin=:.2f}')
                 #self.logger.debug(f'   PCT_CHG:{pct_chg:.2%} coin:{coin}')
 
-            elif len(position_df) != 0 and logic != 10 and self.songiri == True:
+            elif len(position_df) != 0 and self.param.LOGIC != 10 and self.param.SONGIRI == True:
                 # 損切り
                 # 積み立ての時は実施損切しない
                 pass
-                # df, position_df, coin, yen = self.songiri(df, position_df, coin_price, coin, yen, price_decision_logic, tmp_df)
+                df, position_df, coin, yen = self.songiri(df, position_df, coin_price, coin, yen, tmp_df)
 
             df.at[i, 'SimulateAsset'] = yen + coin*coin_price
             df.at[i, 'Profit'] = df.at[i, 'SimulateAsset'] - init_asset
@@ -978,21 +991,17 @@ class AutoTrade:
             # set_parameter(ma_times=ma_times)
 
             # 初期パラメータ設定
-            logic = 2
             init_yen = 100000
             init_coin = 100
-            price_decision_logic = 0
 
             # コマンドライン引数からパラメータ取得
             if args.logic is not None:
-                logic = int(args.logic)
+                self.param.LOGIC = int(args.logic)
 
             # シミュレーション開始
             sim_df = self.simulate(df,
-                logic=logic,
                 init_yen=init_yen,
-                init_coin=init_coin,
-                price_decision_logic=price_decision_logic)
+                init_coin=init_coin)
 
             # 結果（利益）表示
             print(f"シミュレーション利益:{sim_df['Profit'][-1]:.0f}円({1+sim_df['Profit'][-1]/sim_df['SimulateAsset'][0]:.2%})")

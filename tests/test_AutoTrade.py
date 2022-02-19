@@ -297,14 +297,14 @@ class TestAutoTrade:
         logic = 0のテスト
         損切は実施しない
         """
-        self.at.param.logic = 0
-        self.at.param.songiri = False
+        param = Parameter(logic=0, songiri=False)
+        self.at = AutoTrade(param)
 
         df = get_data_20210401_0404_fixture['df']
         df = self.at.calc_features(df)
         df['ma_diff'], df['GCDC_times'] = self.at.get_madata(df)
         # df['RSI'] = self.at.get_rsi(df)
-        sim_df = self.at.simulate(df, self.at.param.logic, init_yen=100000, init_coin=100, price_decision_logic=0)
+        sim_df = self.at.simulate(df, init_yen=100000, init_coin=100)
 
         assert sim_df['Coin'][-1] == 100
         assert sim_df['Profit'][-1] == 3653.634694403416
@@ -316,39 +316,55 @@ class TestAutoTrade:
         logic = 1のテスト
         損切は実施しない
         """
-        self.at.param.logic = 1
-        self.at.param.songiri = False
+        param = Parameter(logic=1, songiri=False)
+        self.at = AutoTrade(param)
 
         df = get_data_20210401_0404_fixture['df']
         df = self.at.calc_features(df)
         df['ma_diff'], df['GCDC_times'] = self.at.get_madata(df)
         # df['RSI'] = self.at.get_rsi(df)
-        sim_df = self.at.simulate(df, self.at.param.logic, init_yen=100000, init_coin=100, price_decision_logic=0)
+        sim_df = self.at.simulate(df, init_yen=100000, init_coin=100)
 
         assert sim_df['Coin'][-1] == 100
         assert sim_df['Profit'][-1] == 3653.634694403416
         assert sim_df['SimulateAsset'][-1] == 217194.0346944034
 
     def test_get_BUYSELLprice_mode0(self):
+        """
+        価格決定ロジック = 0
+        基本購入価格 100円
+        に設定してテスト
+        """
+        param = Parameter(price_decision_logic=0, buy_price=100)
+        self.at = AutoTrade(param=param)
+
         yen_price = 100
         coin_price = 20
         coin = 100
         yen = 10000
-        mode = 0
+        bs_price = self.at.get_BUYSELLprice(self.at.param.BUY_PRICE, coin_price, coin, yen)
 
-        assert self.at.get_BUYSELLprice(yen_price, coin_price, coin, yen, mode) == 100
+        assert bs_price == 100
 
 
     def test_get_BUYSELLprice_mode1(self, get_madata_gcdc81_fixture):
+        """
+        価格決定ロジック = 1
+        基本購入価格 100円
+        に設定してテスト
+        """
+        param = Parameter(price_decision_logic=1, buy_price=100)
+        self.at = AutoTrade(param=param)
+
+        # self.at.param.price_decision_logic = 1
         df = get_madata_gcdc81_fixture['df']
         oneline_df = df.iloc[-1:]
-        yen_price = 100
         coin_price = 20
         coin = 100
         yen = 10000
-        mode = 1
+        bs_price = self.at.get_BUYSELLprice(self.at.param.BUY_PRICE, coin_price, coin, yen, oneline_df)
 
-        assert self.at.get_BUYSELLprice(yen_price, coin_price, coin, yen, mode, oneline_df) == 405
+        assert bs_price == 405
 
     def test_songiri(self, get_test_songiri_7days):
         df = get_test_songiri_7days['df']
@@ -361,7 +377,7 @@ class TestAutoTrade:
         yen = init_yen
         price_decision_logic = 0
 
-        df, position_df, coin, yen = self.at.songiri(df, position_df, coin_price, coin, yen, price_decision_logic, tmp_df)
+        df, position_df, coin, yen = self.at.songiri(df, position_df, coin_price, coin, yen, tmp_df)
         assert len(position_df) == 8
         assert yen == init_yen - self.at.param.BUY_PRICE
         assert coin == init_coin + self.at.param.BUY_PRICE/coin_price
@@ -381,7 +397,7 @@ class TestAutoTrade:
         yen = init_yen
         price_decision_logic = 0
 
-        df, position_df, coin, yen = self.at.songiri(df, position_df, coin_price, coin, yen, price_decision_logic, tmp_df)
+        df, position_df, coin, yen = self.at.songiri(df, position_df, coin_price, coin, yen, tmp_df)
         assert len(position_df) == 0
         assert yen == 100000.0
         assert round(coin, 5) == round(99.99436796,5)
@@ -408,7 +424,7 @@ class TestAutoTrade:
         yen = init_yen
         price_decision_logic = 0
 
-        df, position_df, coin, yen = self.at.songiri(df, position_df, coin_price, coin, yen, price_decision_logic, tmp_df)
+        df, position_df, coin, yen = self.at.songiri(df, position_df, coin_price, coin, yen, tmp_df)
         assert len(position_df) == 1
         assert yen == init_yen
         assert round(coin, 5) == round(init_coin, 5)
@@ -416,10 +432,10 @@ class TestAutoTrade:
 
     def test_songiri_simulate(self, get_test_songiri_7days):
         df = get_test_songiri_7days['df']
-        sim_df = self.at.simulate(df, logic=1, init_yen=100000, init_coin=100, price_decision_logic=0)
+        sim_df = self.at.simulate(df, init_yen=100000, init_coin=100)
 
     def test_simulate_logic10(self, get_test_songiri_7days):
         logic = 10
         df = get_test_songiri_7days['df']
         # df['RSI'] = self.at.get_rsi(df)
-        sim_df = self.at.simulate(df, logic, init_yen=100000, init_coin=100, price_decision_logic=0)
+        sim_df = self.at.simulate(df, init_yen=100000, init_coin=100)
