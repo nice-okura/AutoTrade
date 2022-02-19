@@ -383,6 +383,9 @@ class TestAutoTrade:
         assert coin == init_coin + self.at.param.BUY_PRICE/coin_price
 
     def test_songiri_1days(self, get_test_songiri_1days):
+        """
+        損切する場合のテスト
+        """
         # 売買価格を100円にしてテスト
         param = Parameter(buy_price=100.0, sell_price=100.0, price_decision_logic=0)
         self.at = AutoTrade(param)
@@ -429,6 +432,9 @@ class TestAutoTrade:
         assert yen == init_yen
         assert round(coin, 5) == round(init_coin, 5)
 
+
+    def test_songiri_simulate_1day(self, get_test_songiri_1days):
+        df = get_test_songiri_1days['df']
 
     def test_songiri_simulate(self, get_test_songiri_7days):
         df = get_test_songiri_7days['df']

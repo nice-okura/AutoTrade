@@ -35,7 +35,8 @@ class Parameter:
                  weight_of_price=0.05, # 連続MA回数から購入金額を決めるときの重み
                  logic=0,
                  price_decision_logic=0,
-                 songiri=True):
+                 songiri=True,
+                 songiri_perc=0.1): # 損切する価格変動ボーダー
 
       self.MA_short = ma_short  # 移動平均（短期）
       self.MA_long = ma_lomg  # 移動平均（長期）
@@ -51,7 +52,7 @@ class Parameter:
       self.LOGIC = logic # 売り買いロジック
       self.PDL = price_decision_logic # 売買価格決定ロジック
       self.SONGIRI = songiri # 損切実施するかどうか(True: 損切する, False: 損切しない)
-
+      self.SONGIRI_PERC = songiri_perc # 損切する価格変動ボーダー
 
 class AutoTrade:
 
@@ -520,7 +521,6 @@ class AutoTrade:
         coin_price : float : 現在のコインの価格
         coin : float : 所持コイン数
         yen : float : 所持日本円
-        price_decision_logic : int : 売買価格決定ロジック
         tmp_df : DataFrame : 最新の価格情報
 
         Return
@@ -528,11 +528,9 @@ class AutoTrade:
         df : DataFrame : 損切した場合の売り買い情報が反映されたdef
         position_df : DataFrame : ポジション解放を反映させたもの
         """
-        perc = 0.1
+        perc = self.param.SONGIRI_PERC
         i = tmp_df.index[0]
         # print(f"tmp_df  Date: {i.strftime('%Y/%m/%d %H:%M:%S')} coin_price:{coin_price}")
-
-        # pp(position_df)
 
         for j, p in position_df.iterrows():
             """
@@ -659,7 +657,7 @@ class AutoTrade:
         return df
 
 
-    def set_ma_rsi(self, df):
+    def set_ma(self, df):
         """
             移動平均（MA）とRSIを計算、DataFrameに追記し返却
         """
@@ -975,8 +973,8 @@ class AutoTrade:
             df = self.get_ohlcv(date, MA_long*2, CANDLE_TYPE)
             # df = get_ohlcv(date, 24*200, CANDLE_TYPE)
 
-        # 移動平均(MA)とRSIを計算、設定
-        df = self.set_ma_rsi(df)
+        # 移動平均(MA)を計算、設定
+        df = self.set_ma(df)
         # df.to_csv("sampledata_200days.csv")
         #self.logger.info("\n" + str(df.tail(40)))
 
@@ -1002,6 +1000,7 @@ class AutoTrade:
             sim_df = self.simulate(df,
                 init_yen=init_yen,
                 init_coin=init_coin)
+            # df.to_csv("sampledata_200days.csv")
 
             # 結果（利益）表示
             print(f"シミュレーション利益:{sim_df['Profit'][-1]:.0f}円({1+sim_df['Profit'][-1]/sim_df['SimulateAsset'][0]:.2%})")
@@ -1011,7 +1010,7 @@ class AutoTrade:
 
             # 利益 / ガチホ利益
             print(f"ガチホと比較した効果：{sim_df['SimulateAsset'][-1]/sim_df['GachihoAsset'][-1]:.2%}")
-            # sim_df.to_csv("sampledata_30days_result.csv")
+            # sim_df.to_csv("tests/test_songiri_3days_ohlcv_ans.csv")
             self.save_gragh(sim_df, "simulate00.png")
 
             # df内の各パラメータの相関を確認
@@ -1036,9 +1035,7 @@ class AutoTrade:
                 self.order(BUY, BUY_PRICE, coin_price)
 
 if __name__ == "__main__":
-
-
-    param = Parameter()
+    param = Parameter(songiri_perc=0.01)
     at = AutoTrade(param)
 
     at.main()
