@@ -113,8 +113,16 @@ class TestAutoTrade:
         yield({'df': df, 'position_df': position_df})
 
     @pytest.fixture(scope='class', autouse=True)
+    def get_test_songiri_1days(self):
+        print("### get_test_songiri_1days_fixture ###")
+        df = self.load_csv2pd('tests/test_songiri_1days.csv')
+        position_df = self.load_csv2pd('tests/test_songiri_1days_position.csv')
+
+        yield({'df': df, 'position_df': position_df})
+
+    @pytest.fixture(scope='class', autouse=True)
     def get_test_songiri_3days(self):
-        print("### get_test_songiri_3days_fixture ###")
+        print("### get_test_songiri_1days_fixture ###")
         df = self.load_csv2pd('tests/test_songiri_3days.csv')
         position_df = self.load_csv2pd('tests/test_songiri_3days_position.csv')
 
@@ -285,12 +293,18 @@ class TestAutoTrade:
 
 
     def test_simulate_20210401_0404_logic0(self, get_data_20210401_0404_fixture):
-        logic = 0
+        """
+        logic = 0のテスト
+        損切は実施しない
+        """
+        self.at.param.logic = 0
+        self.at.param.songiri = False
+
         df = get_data_20210401_0404_fixture['df']
         df = self.at.calc_features(df)
         df['ma_diff'], df['GCDC_times'] = self.at.get_madata(df)
         # df['RSI'] = self.at.get_rsi(df)
-        sim_df = self.at.simulate(df, logic, init_yen=100000, init_coin=100, price_decision_logic=0)
+        sim_df = self.at.simulate(df, self.at.param.logic, init_yen=100000, init_coin=100, price_decision_logic=0)
 
         assert sim_df['Coin'][-1] == 100
         assert sim_df['Profit'][-1] == 3653.634694403416
@@ -298,12 +312,18 @@ class TestAutoTrade:
 
 
     def test_simulate_20210401_0404_logic1(self, get_data_20210401_0404_fixture):
-        logic = 1
+        """
+        logic = 1のテスト
+        損切は実施しない
+        """
+        self.at.param.logic = 1
+        self.at.param.songiri = False
+
         df = get_data_20210401_0404_fixture['df']
         df = self.at.calc_features(df)
         df['ma_diff'], df['GCDC_times'] = self.at.get_madata(df)
         # df['RSI'] = self.at.get_rsi(df)
-        sim_df = self.at.simulate(df, logic, init_yen=100000, init_coin=100, price_decision_logic=0)
+        sim_df = self.at.simulate(df, self.at.param.logic, init_yen=100000, init_coin=100, price_decision_logic=0)
 
         assert sim_df['Coin'][-1] == 100
         assert sim_df['Profit'][-1] == 3653.634694403416
@@ -330,26 +350,9 @@ class TestAutoTrade:
 
         assert self.at.get_BUYSELLprice(yen_price, coin_price, coin, yen, mode, oneline_df) == 405
 
-    @pytest.mark.this
-    def test_songiri(self, get_test_songiri_30days):
-        df = get_test_songiri_30days['df']
-        position_df = get_test_songiri_30days['position_df']
-        tmp_df = df.iloc[-1:]
-        coin_price = tmp_df['Close'][0]
-        init_coin = 100
-        coin = init_coin
-        init_yen = 10000
-        yen = init_yen
-        price_decision_logic = 0
-
-        df, position_df, coin, yen = self.at.songiri(df, position_df, coin_price, coin, yen, price_decision_logic, tmp_df)
-        assert len(position_df) == 8
-        assert yen == init_yen - self.at.param.BUY_PRICE
-        assert coin == init_coin + self.at.param.BUY_PRICE/coin_price
-
-    def test_songiri_3days(self, get_test_songiri_3days):
-        df = get_test_songiri_3days['df']
-        position_df = get_test_songiri_3days['position_df']
+    def test_songiri(self, get_test_songiri_7days):
+        df = get_test_songiri_7days['df']
+        position_df = get_test_songiri_7days['position_df']
         tmp_df = df.iloc[-1:]
         coin_price = tmp_df['Close'][0]
         init_coin = 100
@@ -359,17 +362,64 @@ class TestAutoTrade:
         price_decision_logic = 0
 
         df, position_df, coin, yen = self.at.songiri(df, position_df, coin_price, coin, yen, price_decision_logic, tmp_df)
-        assert len(position_df) == 0
-        
-        # assert yen == init_yen - self.at.param.BUY_PRICE
-        # assert coin == init_coin + self.at.param.BUY_PRICE/coin_price
+        assert len(position_df) == 8
+        assert yen == init_yen - self.at.param.BUY_PRICE
+        assert coin == init_coin + self.at.param.BUY_PRICE/coin_price
 
-    def test_songiri_simulate(self, get_test_songiri_30days):
-        df = get_test_songiri_30days['df']
+    def test_songiri_1days(self, get_test_songiri_1days):
+        # 売買価格を100円にしてテスト
+        param = Parameter(buy_price=100.0, sell_price=100.0, price_decision_logic=0)
+        self.at = AutoTrade(param)
+
+        df = get_test_songiri_1days['df']
+        position_df = get_test_songiri_1days['position_df']
+        tmp_df = df.iloc[-1:]
+        coin_price = tmp_df['Close'][0]
+        init_coin = 99.94117647
+        coin = init_coin
+        init_yen = 100100.0
+        yen = init_yen
+        price_decision_logic = 0
+
+        df, position_df, coin, yen = self.at.songiri(df, position_df, coin_price, coin, yen, price_decision_logic, tmp_df)
+        assert len(position_df) == 0
+        assert yen == 100000.0
+        assert round(coin, 5) == round(99.99436796,5)
+
+    def test_songiri_1days_nosongiri(self, get_test_songiri_1days):
+        """
+        損切しない場合のテスト
+        """
+        # 売買価格を100円にしてテスト
+        param = Parameter(buy_price=100.0, sell_price=100.0, price_decision_logic=0)
+        self.at = AutoTrade(param)
+
+        df = get_test_songiri_1days['df']
+        # 損切すべき時刻のデータを削除することで
+        # 損切しないテストデータを作る
+        df = df.drop(df.index[[-1]])
+
+        position_df = get_test_songiri_1days['position_df']
+        tmp_df = df.iloc[-1:]
+        coin_price = tmp_df['Close'][0]
+        init_coin = 99.94117647
+        coin = init_coin
+        init_yen = 100100.0
+        yen = init_yen
+        price_decision_logic = 0
+
+        df, position_df, coin, yen = self.at.songiri(df, position_df, coin_price, coin, yen, price_decision_logic, tmp_df)
+        assert len(position_df) == 1
+        assert yen == init_yen
+        assert round(coin, 5) == round(init_coin, 5)
+
+
+    def test_songiri_simulate(self, get_test_songiri_7days):
+        df = get_test_songiri_7days['df']
         sim_df = self.at.simulate(df, logic=1, init_yen=100000, init_coin=100, price_decision_logic=0)
 
-    def test_simulate_logic10(self, get_test_songiri_30days):
+    def test_simulate_logic10(self, get_test_songiri_7days):
         logic = 10
-        df = get_test_songiri_30days['df']
+        df = get_test_songiri_7days['df']
         # df['RSI'] = self.at.get_rsi(df)
         sim_df = self.at.simulate(df, logic, init_yen=100000, init_coin=100, price_decision_logic=0)

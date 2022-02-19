@@ -32,7 +32,10 @@ class Parameter:
                  rsi_sell=80.0,
                  rsi_buy=20.0,
                  vol_order=200000,
-                 weight_of_price=0.05):
+                 weight_of_price=0.05, # 連続MA回数から購入金額を決めるときの重み
+                 logic=0,
+                 price_decision_logic=0,
+                 songiri=True):
 
       self.MA_short = ma_short  # 移動平均（短期）
       self.MA_long = ma_lomg  # 移動平均（長期）
@@ -44,7 +47,7 @@ class Parameter:
       self.RSI_SELL = rsi_sell  # 売りRSIボーダー
       self.RSI_BUY = rsi_buy # 買いRSIボーダー
       self.VOL_ORDER = vol_order  # 取引する基準となる取引量(Volume)
-      self.WEIGHT_OF_PRICE = weight_of_price  # 連続MA回数から購入金額を決めるときの重み
+      self.WEIGHT_OF_PRICE = weight_of_price
 
 
 class AutoTrade:
@@ -529,6 +532,7 @@ class AutoTrade:
             #     print(f"position SELL  Date: {j.strftime('%Y/%m/%d %H:%M:%S')} Close:{p['Close']} border:{p['Close']*(1+perc)}")
             # sys.exit()
 
+            print(f"border: {p['Close']*(1+perc)}")
             # 購入ポジションがあり、現在の価格(coin_price)が購入価格(p['Close'])からperc%以上下がっている場合、売る
             if p['BUYSELL'] == BUY and coin_price <= p['Close']*(1-perc):
                 print(f"  {p.name.strftime('%Y/%m/%d %H:%M:%S')}に{p['Close']}円で買ったものを{i}に{coin_price}で売る")
@@ -536,11 +540,9 @@ class AutoTrade:
                 # print(f"{df.at[j, 'BUYSELL']= }")
                 #
                 # print(f"BUY Time: {j}")
-                # print(f"BUY Time: {j}")
                 # print(f"BUY Price: {p['Close']}")
                 # print(f"NOW Price: {coin_price}")
 
-                df.at[i, 'BUYSELL'] = SELL
 
                 sell_price = self.get_BUYSELLprice(self.param.SELL_PRICE, coin_price, coin, yen, price_decision_logic=price_decision_logic, oneline_df=tmp_df)  # 購入する仮想通貨の枚数
                 yen += sell_price
@@ -617,11 +619,11 @@ class AutoTrade:
                 #self.logger.debug(f'[SELL]{tmp_df.index.strftime("%Y/%m/%d %H:%M")[0]}: SELL_PRICE: {sell_price:.2f} {coin=:.2f}')
                 #self.logger.debug(f'   PCT_CHG:{pct_chg:.2%} coin:{coin}')
 
-            elif len(position_df) != 0 and logic != 10:
+            elif len(position_df) != 0 and logic != 10 and self.songiri == True:
                 # 損切り
                 # 積み立ての時は実施損切しない
                 pass
-                df, position_df, coin, yen = self.songiri(df, position_df, coin_price, coin, yen, price_decision_logic, tmp_df)
+                # df, position_df, coin, yen = self.songiri(df, position_df, coin_price, coin, yen, price_decision_logic, tmp_df)
 
             df.at[i, 'SimulateAsset'] = yen + coin*coin_price
             df.at[i, 'Profit'] = df.at[i, 'SimulateAsset'] - init_asset
