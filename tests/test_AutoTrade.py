@@ -121,12 +121,11 @@ class TestAutoTrade:
         yield({'df': df, 'position_df': position_df})
 
     @pytest.fixture(scope='class', autouse=True)
-    def get_test_songiri_3days(self):
-        print("### get_test_songiri_1days_fixture ###")
-        df = self.load_csv2pd('tests/test_songiri_3days.csv')
-        position_df = self.load_csv2pd('tests/test_songiri_3days_position.csv')
+    def get_test_songiri_3days_ohlcv(self):
+        print("### get_test_songiri_3days_ohlcv ###")
+        df = self.load_csv2pd('tests/test_songiri_3days_ohlcv.csv')
 
-        yield({'df': df, 'position_df': position_df})
+        yield({'df': df})
     """
 
       *******************
@@ -433,8 +432,23 @@ class TestAutoTrade:
         assert round(coin, 5) == round(init_coin, 5)
 
 
-    def test_songiri_simulate_1day(self, get_test_songiri_1days):
-        df = get_test_songiri_1days['df']
+    def test_songiri_simulate_3day(self, get_test_songiri_3days_ohlcv):
+        df = get_test_songiri_3days_ohlcv['df']
+        # 損切しやすいように、SONGIRI_PERCを0.01(1%)にしてテスト
+        param = Parameter(songiri_perc=0.01)
+        self.at = AutoTrade(param)
+
+        df = self.at.set_ma(df)
+        df = self.at.calc_features(df)
+
+        sim_df = self.at.simulate(df, init_yen=100000, init_coin=100)
+
+        print(sim_df['BUYSELL'])
+        buy_df = sim_df[sim_df['BUYSELL']==1]
+        print(buy_df)
+        assert len(buy_df) == 2
+        assert sim_df[sim_df['BUYSELL']==1].index[0].strftime("%Y%m%d %H:%M:%S") == '20211204 14:00:00'
+        assert sim_df[sim_df['BUYSELL']==1].index[1].strftime("%Y%m%d %H:%M:%S") == '20211204 15:00:00'
 
     def test_songiri_simulate(self, get_test_songiri_7days):
         df = get_test_songiri_7days['df']

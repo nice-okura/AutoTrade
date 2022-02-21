@@ -547,18 +547,12 @@ class AutoTrade:
             if p['BUYSELL'] == BUY and coin_price <= p['Close']*(1-perc):
                 print(f"  {p.name.strftime('%Y/%m/%d %H:%M:%S')}に{p['Close']}円で買ったものを{i}に{coin_price}で売る")
 
-                # print(f"{df.at[j, 'BUYSELL']= }")
-                #
-                # print(f"BUY Time: {j}")
-                # print(f"BUY Price: {p['Close']}")
-                # print(f"NOW Price: {coin_price}")
+                df.at[i, 'BUYSELL'] = SELL
 
                 sell_price = self.get_BUYSELLprice(self.param.SELL_PRICE, coin_price, coin, yen, oneline_df=tmp_df)  # 購入する仮想通貨の枚数
+                print(f"  SELL Price: {sell_price}")
                 yen += sell_price
-                # print(f"  SELL Price: {sell_price}")
-
                 coin -= sell_price/coin_price
-
                 position_df = position_df.drop(j)
                 break
 
@@ -647,10 +641,6 @@ class AutoTrade:
             if df.at[i, 'BUYSELL'] == BUY or df.at[i, 'BUYSELL'] == SELL:
                 print(f"★売り買い：{df.at[i, 'BUYSELL']} 時刻：{i} 価格：{df.at[i, 'Close']}")
                 position_df = position_df.append(df.loc[i])
-                # print(f"{len(position_df)=}")
-                # print(f"{position_df.info()=}")
-                # print(f"{pd.DataFrame(df.loc[i])= }")
-                # sys.exit()
 
             self.check_minus(df)
 
@@ -1010,7 +1000,7 @@ class AutoTrade:
 
             # 利益 / ガチホ利益
             print(f"ガチホと比較した効果：{sim_df['SimulateAsset'][-1]/sim_df['GachihoAsset'][-1]:.2%}")
-            # sim_df.to_csv("tests/test_songiri_3days_ohlcv_ans.csv")
+            # sim_df.to_csv("tests/test_songiri_1days_ohlcv_ans.csv")
             self.save_gragh(sim_df, "simulate00.png")
 
             # df内の各パラメータの相関を確認
@@ -1035,7 +1025,7 @@ class AutoTrade:
                 self.order(BUY, BUY_PRICE, coin_price)
 
 if __name__ == "__main__":
-    param = Parameter(songiri_perc=0.01)
+    param = Parameter()
     at = AutoTrade(param)
 
     at.main()
