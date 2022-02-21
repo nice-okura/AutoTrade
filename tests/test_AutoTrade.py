@@ -105,9 +105,9 @@ class TestAutoTrade:
         yield({'df': test_df})
 
     @pytest.fixture(scope='class', autouse=True)
-    def get_test_songiri_7days(self):
-        print("### get_test_songiri_57ays_fixture ###")
-        df = self.load_csv2pd('tests/test_songiri_7days.csv')
+    def get_test_songiri_7days_ohlcv(self):
+        print("### get_test_songiri_7days_ohlcv ###")
+        df = self.load_csv2pd('tests/test_songiri_7days_ohlcv.csv')
         position_df = self.load_csv2pd('tests/test_songiri_7days_position.csv')
 
         yield({'df': df, 'position_df': position_df})
@@ -179,6 +179,7 @@ class TestAutoTrade:
 
         assert times_list[-1] == 5
 
+
     def test_get_madata_madiff(self, get_madata_times81_fixture):
         """
         ma_diff が68222.3116となる場合
@@ -207,7 +208,6 @@ class TestAutoTrade:
     #     rsi = self.at.get_rsi(df)
     #
     #     assert rsi.iloc()[-1] == 69.09899987493397
-
     def test_is_gcdc(self, get_madata_gcdc81_fixture):
         """
         連続GDCD回数が9の倍数
@@ -215,6 +215,7 @@ class TestAutoTrade:
         df = get_madata_gcdc81_fixture['df']
 
         assert self.at.is_gcdc(df, 9)
+
 
     def test_isnot_gcdc(self, get_madata_gcdc1_fixture):
         """
@@ -224,6 +225,7 @@ class TestAutoTrade:
 
         assert not self.at.is_gcdc(df, 9)
 
+
     def test_buysell_by_rsi_sell(self, get_madata_rsiover80_fixture):
         """
         RSIから売りと判断される
@@ -231,6 +233,7 @@ class TestAutoTrade:
         df = get_madata_rsiover80_fixture['df']
 
         assert self.at.buysell_by_rsi(df) == -1
+
 
     def test_buysell_by_rsi_buy(self, get_madata_rsiunder20_fixture):
         """
@@ -240,6 +243,7 @@ class TestAutoTrade:
 
         assert self.at.buysell_by_rsi(df) == 1
 
+
     def test_buysell_by_rsi_stay(self, get_madata_gcdc1_fixture):
         """
         RSIから売りと判断される
@@ -247,6 +251,7 @@ class TestAutoTrade:
         df = get_madata_gcdc1_fixture['df']
 
         assert self.at.buysell_by_rsi(df) == 0
+
 
     def test_buysell_by_vol_1(self, get_madata_gcdc1_fixture):
         """
@@ -259,6 +264,7 @@ class TestAutoTrade:
 
         assert not self.at.buysell_by_vol(df)
 
+
     def test_buysell_by_vol_2(self, get_madata_gcdc81_fixture):
         """
         VOLが十分なので取引する
@@ -270,10 +276,12 @@ class TestAutoTrade:
 
         assert self.at.buysell_by_vol(df)
 
+
     def test_order_buy(self, mocker):
         mocker.patch('AutoTrade.DEBUG', False)
         mocker.patch.object(CryptService, 'post_order', return_value={'success': 1, 'data': {'start_amount': 100.0}})
         assert self.at.order(BUY, 1.0, 100.0) == 100.0
+
 
     def test_order_sell(self, mocker):
         mocker.patch('AutoTrade.DEBUG', False)
@@ -328,6 +336,7 @@ class TestAutoTrade:
         assert sim_df['Profit'][-1] == 3653.634694403416
         assert sim_df['SimulateAsset'][-1] == 217194.0346944034
 
+
     def test_get_BUYSELLprice_mode0(self):
         """
         価格決定ロジック = 0
@@ -365,9 +374,10 @@ class TestAutoTrade:
 
         assert bs_price == 405
 
-    def test_songiri(self, get_test_songiri_7days):
-        df = get_test_songiri_7days['df']
-        position_df = get_test_songiri_7days['position_df']
+
+    def test_songiri(self, get_test_songiri_7days_ohlcv):
+        df = get_test_songiri_7days_ohlcv['df']
+        position_df = get_test_songiri_7days_ohlcv['position_df']
         tmp_df = df.iloc[-1:]
         coin_price = tmp_df['Close'][0]
         init_coin = 100
@@ -380,6 +390,7 @@ class TestAutoTrade:
         assert len(position_df) == 8
         assert yen == init_yen - self.at.param.BUY_PRICE
         assert coin == init_coin + self.at.param.BUY_PRICE/coin_price
+
 
     def test_songiri_1days(self, get_test_songiri_1days):
         """
@@ -403,6 +414,7 @@ class TestAutoTrade:
         assert len(position_df) == 0
         assert yen == 100000.0
         assert round(coin, 5) == round(99.99436796,5)
+
 
     def test_songiri_1days_nosongiri(self, get_test_songiri_1days):
         """
@@ -443,19 +455,42 @@ class TestAutoTrade:
 
         sim_df = self.at.simulate(df, init_yen=100000, init_coin=100)
 
-        print(sim_df['BUYSELL'])
         buy_df = sim_df[sim_df['BUYSELL']==1]
-        print(buy_df)
-        assert len(buy_df) == 2
-        assert sim_df[sim_df['BUYSELL']==1].index[0].strftime("%Y%m%d %H:%M:%S") == '20211204 14:00:00'
-        assert sim_df[sim_df['BUYSELL']==1].index[1].strftime("%Y%m%d %H:%M:%S") == '20211204 15:00:00'
+        sell_df = sim_df[sim_df['BUYSELL']==-1]
 
-    def test_songiri_simulate(self, get_test_songiri_7days):
-        df = get_test_songiri_7days['df']
+        assert len(buy_df) == 1
+        assert len(sell_df) == 1
+        assert buy_df.index[0].strftime("%Y%m%d %H:%M:%S") == '20211204 14:00:00'
+        assert sell_df.index[0].strftime("%Y%m%d %H:%M:%S") == '20211204 15:00:00'
+
+
+    def test_songiri_simulate_3day_logic4(self, get_test_songiri_7days_ohlcv):
+        df = get_test_songiri_7days_ohlcv['df']
+        # logic 4 にしてテスト
+        param = Parameter(logic=4)
+        self.at = AutoTrade(param)
+
+        df = self.at.set_ma(df)
+        df = self.at.calc_features(df)
+
         sim_df = self.at.simulate(df, init_yen=100000, init_coin=100)
 
-    def test_simulate_logic10(self, get_test_songiri_7days):
+        songiribuy_df = sim_df[(sim_df['BUYSELL']==1) & (sim_df['Songiri']==True)]
+        songirisell_df = sim_df[(sim_df['BUYSELL']==-1) & (sim_df['Songiri']==True)]
+
+        assert len(songiribuy_df) == 0
+        assert songirisell_df.index[0].strftime("%Y-%m-%d %H:%M:%S") == '2021-12-04 09:00:00'
+        assert songirisell_df.index[1].strftime("%Y-%m-%d %H:%M:%S") == '2021-12-04 12:00:00'
+        assert songirisell_df.index[2].strftime("%Y-%m-%d %H:%M:%S") == '2021-12-04 20:00:00'
+        assert songirisell_df.index[3].strftime("%Y-%m-%d %H:%M:%S") == '2021-12-06 15:00:00'
+
+    def test_songiri_simulate(self, get_test_songiri_7days_ohlcv):
+        df = get_test_songiri_7days_ohlcv['df']
+        sim_df = self.at.simulate(df, init_yen=100000, init_coin=100)
+
+
+    def test_simulate_logic10(self, get_test_songiri_7days_ohlcv):
         logic = 10
-        df = get_test_songiri_7days['df']
+        df = get_test_songiri_7days_ohlcv['df']
         # df['RSI'] = self.at.get_rsi(df)
         sim_df = self.at.simulate(df, init_yen=100000, init_coin=100)

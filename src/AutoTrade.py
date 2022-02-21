@@ -54,6 +54,7 @@ class Parameter:
       self.SONGIRI = songiri # 損切実施するかどうか(True: 損切する, False: 損切しない)
       self.SONGIRI_PERC = songiri_perc # 損切する価格変動ボーダー
 
+
 class AutoTrade:
 
     def __init__(self, param):
@@ -498,6 +499,7 @@ class AutoTrade:
 
         return BUYSELLprice
 
+
     def check_minus(self, df):
         minus_coin = df.query('Coin < 0')
         minus_jpy = df.query('JPY < 0')
@@ -509,6 +511,7 @@ class AutoTrade:
         if len(minus_jpy) != 0:
             print(f"Error: 所持日本円: {minus_coin['JPY'].iloc[-1]}")
             sys.exit()
+
 
     def songiri(self, df, position_df, coin_price, coin, yen, tmp_df):
         """ 今の価格にて、これまでの売り買いポジションから、perc%以上の損失が出ている場合、
@@ -548,9 +551,10 @@ class AutoTrade:
                 print(f"  {p.name.strftime('%Y/%m/%d %H:%M:%S')}に{p['Close']}円で買ったものを{i}に{coin_price}で売る")
 
                 df.at[i, 'BUYSELL'] = SELL
+                df.at[i, 'Songiri'] = True
 
                 sell_price = self.get_BUYSELLprice(self.param.SELL_PRICE, coin_price, coin, yen, oneline_df=tmp_df)  # 購入する仮想通貨の枚数
-                print(f"  SELL Price: {sell_price}")
+                # print(f"  SELL Price: {sell_price}")
                 yen += sell_price
                 coin -= sell_price/coin_price
                 position_df = position_df.drop(j)
@@ -561,15 +565,17 @@ class AutoTrade:
 
                 # print(f"{coin_price=} ")
                 df.at[i, 'BUYSELL'] = BUY
+                df.at[i, 'Songiri'] = True
 
                 buy_price = self.get_BUYSELLprice(self.param.BUY_PRICE, coin_price, coin, yen, oneline_df=tmp_df)  # 購入する仮想通貨の枚数
-                print(f"  BUY Price: {buy_price}")
+                # print(f"  BUY Price: {buy_price}")
                 yen -= buy_price
                 coin += buy_price/coin_price
                 position_df = position_df.drop(j)
                 break
 
         return df, position_df, coin, yen
+
 
     def simulate(self, df, init_yen=100000, init_coin=100):
         # self.logger.debug("## simulate ")
@@ -595,6 +601,7 @@ class AutoTrade:
         df['Profit'] = 0.0            # シミュレーションしたときの利益（総資産ー初期資産）index 10
         df['Coin'] = init_coin        # 所持仮想通貨数　index 11
         df['JPY'] = init_yen
+        df['Songiri'] = False
 
         logic = self.param.LOGIC
 
@@ -639,8 +646,11 @@ class AutoTrade:
 
             # ポジション保存
             if df.at[i, 'BUYSELL'] == BUY or df.at[i, 'BUYSELL'] == SELL:
-                print(f"★売り買い：{df.at[i, 'BUYSELL']} 時刻：{i} 価格：{df.at[i, 'Close']}")
-                position_df = position_df.append(df.loc[i])
+                # 売り買いして、
+                if df.at[i, 'Songiri'] == False:
+                    # それが損切りの売買でない場合
+                    print(f"★売り買い：{df.at[i, 'BUYSELL']} 時刻：{i} 価格：{df.at[i, 'Close']}")
+                    position_df = position_df.append(df.loc[i])
 
             self.check_minus(df)
 
@@ -965,8 +975,6 @@ class AutoTrade:
 
         # 移動平均(MA)を計算、設定
         df = self.set_ma(df)
-        # df.to_csv("sampledata_200days.csv")
-        #self.logger.info("\n" + str(df.tail(40)))
 
         # 対象通貨の現在の価格
         coin_price = df['Close'][-1]
@@ -975,9 +983,6 @@ class AutoTrade:
         # set_y(df)
 
         if args.s is not None:
-            # シミュレーション
-            # set_parameter(ma_times=ma_times)
-
             # 初期パラメータ設定
             init_yen = 100000
             init_coin = 100
@@ -990,7 +995,6 @@ class AutoTrade:
             sim_df = self.simulate(df,
                 init_yen=init_yen,
                 init_coin=init_coin)
-            # df.to_csv("sampledata_200days.csv")
 
             # 結果（利益）表示
             print(f"シミュレーション利益:{sim_df['Profit'][-1]:.0f}円({1+sim_df['Profit'][-1]/sim_df['SimulateAsset'][0]:.2%})")
@@ -1000,7 +1004,7 @@ class AutoTrade:
 
             # 利益 / ガチホ利益
             print(f"ガチホと比較した効果：{sim_df['SimulateAsset'][-1]/sim_df['GachihoAsset'][-1]:.2%}")
-            # sim_df.to_csv("tests/test_songiri_1days_ohlcv_ans.csv")
+            # sim_df.to_csv("tests/test_songiri_7days_ohlcv_logic4_ans.csv")
             self.save_gragh(sim_df, "simulate00.png")
 
             # df内の各パラメータの相関を確認
@@ -1023,6 +1027,7 @@ class AutoTrade:
                 # 購　入
                 # ##################
                 self.order(BUY, BUY_PRICE, coin_price)
+
 
 if __name__ == "__main__":
     param = Parameter()
