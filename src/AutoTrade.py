@@ -417,7 +417,7 @@ class AutoTrade:
             ５単位時間後にどのくらい価格変化するかを表した指標（_CLOSE_PCT_CHANGE）が
             border%以上変化する場合、売買する。
             """
-            border = 0.03
+            border = 0.05
 
             if df['_CLOSE_PCT_CHANGE'][-1] >= border:
                 buysell = BUY
@@ -872,7 +872,7 @@ class AutoTrade:
         # Force Entry Priceの計算
         # 買いの場合
         print("買い")
-        df['buy_fep'], df['buy_fet'] = calc_force_entry_price(
+        df['buy_fep'], df['buy_fet'] = self.calc_force_entry_price(
             entry_price=df['buy_price'].values,
             lo=df['Low'].values,
             pips=pips,
@@ -881,7 +881,7 @@ class AutoTrade:
 
         # calc_force_entry_priceは入力と出力をマイナスにすれば売りに使えます
         print("売り")
-        df['sell_fep'], df['sell_fet'] = calc_force_entry_price(
+        df['sell_fep'], df['sell_fet'] = self.calc_force_entry_price(
             entry_price=-df['sell_price'].values,
             lo=-df['High'].values, # 売りのときは高値
             pips=pips,
@@ -954,9 +954,10 @@ class AutoTrade:
     def main(self):
         # オプション引数
         argparser = ArgumentParser()
-        argparser.add_argument('-l')
-        argparser.add_argument('-s', action='store_true', help='Simulate mode.')
-        argparser.add_argument('--logic')
+        argparser.add_argument('-l') # OHLCVファイルの読み込み
+        argparser.add_argument('-s', action='store_true', help='Simulate mode.') # シミュレートモード
+        argparser.add_argument('--logic') # 売買価格決定ロジックの指定
+        argparser.add_argument('-o') # シミュレート結果CSVの出力先指定
         args = argparser.parse_args()
 
         # DataFrameの最大表示行数
@@ -986,10 +987,12 @@ class AutoTrade:
             # 初期パラメータ設定
             init_yen = 100000
             init_coin = 100
+            output_filename = ""
 
             # コマンドライン引数からパラメータ取得
             if args.logic is not None:
                 self.param.LOGIC = int(args.logic)
+                output_filename = args.o
 
             # シミュレーション開始
             sim_df = self.simulate(df,
@@ -1004,7 +1007,12 @@ class AutoTrade:
 
             # 利益 / ガチホ利益
             print(f"ガチホと比較した効果：{sim_df['SimulateAsset'][-1]/sim_df['GachihoAsset'][-1]:.2%}")
-            # sim_df.to_csv("tests/test_songiri_7days_ohlcv_logic4_ans.csv")
+
+            # シミュレート結果のファイル出力
+            if output_filename != "":
+                sim_df.to_csv(output_filename)
+
+            # グラフ描画
             self.save_gragh(sim_df, "simulate00.png")
 
             # df内の各パラメータの相関を確認

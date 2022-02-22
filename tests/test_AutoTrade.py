@@ -484,13 +484,16 @@ class TestAutoTrade:
         assert songirisell_df.index[2].strftime("%Y-%m-%d %H:%M:%S") == '2021-12-04 20:00:00'
         assert songirisell_df.index[3].strftime("%Y-%m-%d %H:%M:%S") == '2021-12-06 15:00:00'
 
-    def test_songiri_simulate(self, get_test_songiri_7days_ohlcv):
-        df = get_test_songiri_7days_ohlcv['df']
-        sim_df = self.at.simulate(df, init_yen=100000, init_coin=100)
-
-
     def test_simulate_logic10(self, get_test_songiri_7days_ohlcv):
         logic = 10
         df = get_test_songiri_7days_ohlcv['df']
         # df['RSI'] = self.at.get_rsi(df)
         sim_df = self.at.simulate(df, init_yen=100000, init_coin=100)
+
+    def test_ml(self, get_test_songiri_3days_ohlcv):
+        df = get_test_songiri_3days_ohlcv['df']
+
+        df = self.at.set_ma(df)
+        df = self.at.calc_features(df)
+
+        df = self.at.set_y(df)
