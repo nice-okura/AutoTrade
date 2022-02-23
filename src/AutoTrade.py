@@ -453,13 +453,13 @@ class AutoTrade:
 
 
     def ml(self):
-        df = pd.read_csv('./sampledata_200days_logic-1.csv')
+        df = pd.read_csv('./sampledata_30days_logic-1_pdl-1_bsprice.csv')
         df = df.set_index('Date')
         df = df.astype(float)
         df = df.dropna()
 
-        X = df.drop(['BUYSELL', '_CLOSE_PCT_CHANGE', 'SimulateAsset', 'Profit', 'Coin', 'JPY', 'Songiri', 'GachihoAsset', 'GachihoProfit'], axis=1)
-        y = df[['BUYSELL']]
+        X = df.drop(['BUYSELL', '_CLOSE_PCT_CHANGE', 'SimulateAsset', 'Profit', 'Coin', 'JPY', 'Songiri', 'GachihoAsset', 'GachihoProfit', 'BUYSELL_PRICE'], axis=1)
+        y = df[['BUYSELL_PRICE']]
 
         X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=0)
 
@@ -564,7 +564,7 @@ class AutoTrade:
             elif ma_diff > 0:
                 # 買い
                 BUYSELLprice = jpy*weight
-                
+
         elif price_decision_logic == -1:
             """
             n単位時間後の価格変化率(pct_chg)から売り買い価格を決める
@@ -683,6 +683,7 @@ class AutoTrade:
         df['Coin'] = init_coin        # 所持仮想通貨数　index 11
         df['JPY'] = init_yen
         df['Songiri'] = False
+        df['BUYSELL_PRICE'] = 0
 
         logic = self.param.LOGIC
 
@@ -697,12 +698,13 @@ class AutoTrade:
 
             if self.buyORsell(tmp_df) == BUY:
                 df.at[i, 'BUYSELL'] = BUY
-
                 buy_price = self.get_BUYSELLprice(self.param.BUY_PRICE, coin_price, coin, yen, oneline_df=tmp_df)  # 購入する仮想通貨の枚数
                 yen -= buy_price
                 coin += buy_price/coin_price
                 #self.logger.debug(f'[BUY]{tmp_df.index.strftime("%Y/%m/%d %H:%M")[0]}: BUY_PRICE: {buy_price:.2f} {coin=:.2f}')
                 #self.logger.debug(f'   PCT_CHG:{pct_chg:.2%} jpy:{yen}')
+                df.at[i, 'BUYSELL_PRICE'] = buy_price
+
             elif self.buyORsell(tmp_df) == SELL:
                 df.at[i, 'BUYSELL'] = SELL
 
@@ -711,6 +713,7 @@ class AutoTrade:
                 coin -= sell_price/coin_price
                 #self.logger.debug(f'[SELL]{tmp_df.index.strftime("%Y/%m/%d %H:%M")[0]}: SELL_PRICE: {sell_price:.2f} {coin=:.2f}')
                 #self.logger.debug(f'   PCT_CHG:{pct_chg:.2%} coin:{coin}')
+                df.at[i, 'BUYSELL_PRICE'] = -sell_price
 
             elif len(position_df) != 0 and self.param.LOGIC != 10 and self.param.SONGIRI == True:
                 # 損切り
@@ -733,6 +736,7 @@ class AutoTrade:
                     print(f"★売り買い：{df.at[i, 'BUYSELL']} 時刻：{i} 価格：{df.at[i, 'Close']}\
 所持日本円:{df.at[i, 'JPY']} 所持コイン:{df.at[i, 'Coin']} 資産:{df.at[i, 'SimulateAsset']:.0f}")
                     position_df = position_df.append(df.loc[i])
+
 
             self.check_minus(df)
 
@@ -1144,5 +1148,5 @@ if __name__ == "__main__":
     param = Parameter(buy_price=100, sell_price=100)
     at = AutoTrade(param)
 
-    at.main()
-        # at.ml()
+    # at.main()
+    at.ml()
