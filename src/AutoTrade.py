@@ -20,6 +20,9 @@ from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 from sklearn.metrics import accuracy_score
 from sklearn.metrics import confusion_matrix
+from sklearn.model_selection import RandomizedSearchCV
+
+import lightgbm as lgb
 import seaborn as sns
 
 DEBUG = True
@@ -353,9 +356,14 @@ class AutoTrade:
             """
             機械学習のモデルを読み込んで売り買い判定する
             """
-            df = df.drop(['BUYSELL', '_CLOSE_PCT_CHANGE', 'SimulateAsset', 'Profit', 'Coin', 'JPY', 'Songiri'], axis=1)
+            df = df.drop(['BUYSELL', '_CLOSE_PCT_CHANGE', 'SimulateAsset', 'Profit', 'Coin', 'JPY', 'Songiri', 'BUYSELL_PRICE'], axis=1)
+            # df = df.drop(['BUYSELL', '_CLOSE_PCT_CHANGE', 'SimulateAsset', 'Profit', 'Coin', 'JPY', 'Songiri'], axis=1)
             pred_df = self.model.predict(df[-1:])
-            buysell = int(pred_df[0])
+            if int(pred_df[0]) < -10000:
+                buysell = SELL
+            elif int(pred_df[0]) > 10000:
+                buysell = BUY
+
             pass
 
         elif logic == 0:
@@ -463,23 +471,51 @@ class AutoTrade:
 
         X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=0)
 
-        params = {"n_estimators": [200],
-          "max_depth": [50],
-          "max_features": ["sqrt"]
-          }
+        # params = {"n_estimators": np.arange(0,100,10),
+        #    "max_depth": np.arange(2,1000,2),
+        #    "num_leaves": np.arange(2,64,10),
+        #    "learning_rate": [0.1, 0.25, 0.5],
+        #    "random_state": [0]
+        #     }
 
-        rf = RandomForestClassifier(random_state=0)
+        """
+        ベストパラメータ：{'subsample_freq': 7, 'subsample': 1.0, 'reg_lambda': 0.1, 'reg_alpha': 0.1, 'num_leaves': 28, 'min_child_samples': 0, 'max_depth': 8, 'learning_rate': 0.1, 'colsample_bytree': 0.9}
+        ベストスコア:0.34351017839905695
+        テストデータスコア
+          MAE = 3599.230467237557
+          MSE = 32515808.850873124
+          RMSE = 5702.263484869243
+          R2 = 0.30452972156647884
+
+        """
+        params = {'reg_alpha': [0.0001, 0.0003, 0.001, 0.003, 0.01, 0.03, 0.1],
+             'reg_lambda': [0.0001, 0.0003, 0.001, 0.003, 0.01, 0.03, 0.1],
+             'num_leaves': [2, 4, 8, 10, 14, 20, 28, 32],
+             'colsample_bytree': [0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0],
+             'subsample': [0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0],
+             'subsample_freq': [0, 1, 2, 3, 4, 5, 6, 7],
+             "learning_rate": [0.1, 0.25, 0.5],
+             "max_depth": [4, 8, 16, 32],
+             'min_child_samples': [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+             }            # 学習時fitパラメータ指定
+        fit_params = {'verbose': 0,  # 学習中のコマンドライン出力
+            'early_stopping_rounds': 10,  # 学習時、評価指標がこの回数連続で改善しなくなった時点でストップ
+            'eval_metric': 'r2',  # early_stopping_roundsの評価指標
+            'eval_set': [(X_train, y_train)]  # early_stopping_roundsの評価指標算出用データ
+            }
+
+        reg = lgb.LGBMRegressor(boosting_type='gbdt', objective='regression', n_estimators=10000)
+        # reg = xgb.XGBRegressor(objective='reg:squarederror')
         k_fold = KFold(n_splits=5, shuffle=True, random_state=0)
-        grid = GridSearchCV(rf, param_grid=params, cv=k_fold, scoring="r2", verbose=1)
-        grid.fit(X_train, y_train)
+        # grid = GridSearchCV(estimator=reg, param_grid=params, cv=k_fold, scoring="r2", verbose=2)
+        grid = RandomizedSearchCV(estimator=reg, param_distributions=params, scoring="r2", cv=k_fold, n_iter=1000, random_state=0, verbose=2)
 
-        print(grid.best_params_)
-        print(grid.best_score_)
+        grid.fit(X_train, y_train, **fit_params)
 
-        # 評価
-        y_train_pred = grid.predict(X_train)
+        print(f"ベストパラメータ：{grid.best_params_}")
+        print(f"ベストスコア:{grid.best_score_}")
+
         y_test_pred = grid.predict(X_test)
-        y_train_pred = np.expand_dims(y_train_pred, 1)
         y_test_pred = np.expand_dims(y_test_pred, 1)
 
         def get_eval_score(y_true,y_pred):
@@ -494,20 +530,8 @@ class AutoTrade:
               print(f"  RMSE = {rmse}")
               print(f"  R2 = {r2score}")
 
-        print("訓練データスコア")
-        get_eval_score(y_train,y_train_pred)
         print("テストデータスコア")
-        get_eval_score(y_test,y_test_pred)
-
-        print(f"訓練データ正解率：{accuracy_score(y_train, y_train_pred)}")
-        print(f"テストデータ正解率：{accuracy_score(y_test, y_test_pred)}")
-
-        matrix = confusion_matrix(y_test, y_test_pred)
-        print(matrix)
-        sns.heatmap(matrix.T, square=True, annot=True)
-        plt.xlabel("True Label")
-        plt.ylabel("Pred Label")
-        plt.show()
+        get_eval_score(y_test, y_test_pred)
 
         filename = 'test_model.pkl'
         pickle.dump(grid, open(filename, 'wb'))
@@ -536,7 +560,14 @@ class AutoTrade:
         BUYSELLprice = 0.0
         price_decision_logic = self.param.PDL
 
-        if price_decision_logic == 0:
+        if self.model is not None:
+            """
+            機械学習のモデルを読み込んで売り買い判定する
+            """
+            oneline_df = oneline_df.drop(['BUYSELL', '_CLOSE_PCT_CHANGE', 'SimulateAsset', 'Profit', 'Coin', 'JPY', 'Songiri', 'BUYSELL_PRICE'], axis=1)
+            pred_df = self.model.predict(oneline_df[-1:])
+            BUYSELLprice = abs(int(pred_df))/100
+        elif price_decision_logic == 0:
             """
             パラメータで設定した価格で一律売買（重みづけなどなし）
             """
@@ -733,7 +764,7 @@ class AutoTrade:
                 # 売り買いして、
                 if df.at[i, 'Songiri'] == False:
                     # それが損切りの売買でない場合
-                    print(f"★売り買い：{df.at[i, 'BUYSELL']} 時刻：{i} 価格：{df.at[i, 'Close']}\
+                    print(f"★売り買い：{df.at[i, 'BUYSELL']} 時刻：{i} 価格：{df.at[i, 'Close']} \
 所持日本円:{df.at[i, 'JPY']} 所持コイン:{df.at[i, 'Coin']} 資産:{df.at[i, 'SimulateAsset']:.0f}")
                     position_df = position_df.append(df.loc[i])
 
@@ -1148,5 +1179,5 @@ if __name__ == "__main__":
     param = Parameter(buy_price=100, sell_price=100)
     at = AutoTrade(param)
 
-    # at.main()
-    at.ml()
+    at.main()
+    # at.ml()
