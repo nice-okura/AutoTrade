@@ -487,6 +487,12 @@ class TestAutoTrade:
     def test_simulate_logic10(self, get_test_songiri_7days_ohlcv):
         logic = 10
         df = get_test_songiri_7days_ohlcv['df']
+        df = self.at.set_ma(df)
+        df = self.at.calc_features(df)
+        print(df.head())
+        df = df.dropna()
+        print(df.head())
+
         # df['RSI'] = self.at.get_rsi(df)
         sim_df = self.at.simulate(df, init_yen=100000, init_coin=100)
 
@@ -495,5 +501,19 @@ class TestAutoTrade:
 
         df = self.at.set_ma(df)
         df = self.at.calc_features(df)
+        df = df.dropna()
 
         df = self.at.set_y(df)
+
+    def test_simulate_load_model(self, get_test_songiri_3days_ohlcv):
+        df = get_test_songiri_3days_ohlcv['df']
+        param = Parameter(ml_model="./test_model.pkl")
+        self.at = AutoTrade(param)
+
+        df = self.at.set_ma(df)
+        df = self.at.calc_features(df)
+        df = df.dropna()
+
+        sim_df = self.at.simulate(df, init_yen=100000, init_coin=100)
+
+        print(sim_df['BUYSELL'].tail())

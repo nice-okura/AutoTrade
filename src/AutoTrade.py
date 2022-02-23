@@ -1,16 +1,26 @@
-import numpy as np
 import math
 from datetime import datetime
 from datetime import timedelta
 import os
 import sys
 import pandas as pd
+import numpy as np
 import logging
 from CryptService import CryptService
 from argparse import ArgumentParser
 import matplotlib.pyplot as plt
 from pprint import pprint as pp
 import talib
+import pickle
+
+from sklearn.model_selection import GridSearchCV
+from sklearn.model_selection import KFold
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
+from sklearn.metrics import accuracy_score
+from sklearn.metrics import confusion_matrix
+import seaborn as sns
 
 DEBUG = True
 
@@ -36,7 +46,8 @@ class Parameter:
                  logic=0,
                  price_decision_logic=0,
                  songiri=True,
-                 songiri_perc=0.1): # 損切する価格変動ボーダー
+                 songiri_perc=0.1, # 損切する価格変動ボーダー
+                 ml_model=None):
 
       self.MA_short = ma_short  # 移動平均（短期）
       self.MA_long = ma_lomg  # 移動平均（長期）
@@ -53,6 +64,7 @@ class Parameter:
       self.PDL = price_decision_logic # 売買価格決定ロジック
       self.SONGIRI = songiri # 損切実施するかどうか(True: 損切する, False: 損切しない)
       self.SONGIRI_PERC = songiri_perc # 損切する価格変動ボーダー
+      self.ML_MODEL = ml_model # 機械学習モデルのファイル名
 
 
 class AutoTrade:
@@ -60,6 +72,7 @@ class AutoTrade:
     def __init__(self, param):
         self.param = param
         self.cs = CryptService(URL, PUBLIC_URL, os.environ['API_KEY'], os.environ['API_SECRET'], "bitbank")
+        self.model = None
 
         # 1. ロガーを取得する
         logger = logging.getLogger(__name__)
@@ -336,7 +349,16 @@ class AutoTrade:
         """
             メインの売り買いロジック
         """
-        if logic == 0:
+        if self.model is not None:
+            """
+            機械学習のモデルを読み込んで売り買い判定する
+            """
+            df = df.drop(['BUYSELL', '_CLOSE_PCT_CHANGE', 'SimulateAsset', 'Profit', 'Coin', 'JPY', 'Songiri'], axis=1)
+            pred_df = self.model.predict(df[-1:])
+            buysell = int(pred_df[0])
+            pass
+
+        elif logic == 0:
             if self.buysell_by_vol(df):
                 if (self.is_gcdc(df, self.param.MA_times) and gcdc == "GC") or self.buysell_by_rsi(df) == BUY:
                     buysell = BUY
@@ -417,7 +439,7 @@ class AutoTrade:
             ５単位時間後にどのくらい価格変化するかを表した指標（_CLOSE_PCT_CHANGE）が
             border%以上変化する場合、売買する。
             """
-            border = 0.05
+            border = 0.01
 
             if df['_CLOSE_PCT_CHANGE'][-1] >= border:
                 buysell = BUY
@@ -428,6 +450,67 @@ class AutoTrade:
             self.logger.error("対応ロジックなし logic: " + logic)
 
         return buysell
+
+
+    def ml(self):
+        df = pd.read_csv('./sampledata_200days_logic-1.csv')
+        df = df.set_index('Date')
+        df = df.astype(float)
+        df = df.dropna()
+
+        X = df.drop(['BUYSELL', '_CLOSE_PCT_CHANGE', 'SimulateAsset', 'Profit', 'Coin', 'JPY', 'Songiri', 'GachihoAsset', 'GachihoProfit'], axis=1)
+        y = df[['BUYSELL']]
+
+        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=0)
+
+        params = {"n_estimators": [200],
+          "max_depth": [50],
+          "max_features": ["sqrt"]
+          }
+
+        rf = RandomForestClassifier(random_state=0)
+        k_fold = KFold(n_splits=5, shuffle=True, random_state=0)
+        grid = GridSearchCV(rf, param_grid=params, cv=k_fold, scoring="r2", verbose=1)
+        grid.fit(X_train, y_train)
+
+        print(grid.best_params_)
+        print(grid.best_score_)
+
+        # 評価
+        y_train_pred = grid.predict(X_train)
+        y_test_pred = grid.predict(X_test)
+        y_train_pred = np.expand_dims(y_train_pred, 1)
+        y_test_pred = np.expand_dims(y_test_pred, 1)
+
+        def get_eval_score(y_true,y_pred):
+
+              mae = mean_absolute_error(y_true,y_pred)
+              mse = mean_squared_error(y_true,y_pred)
+              rmse = np.sqrt(mse)
+              r2score = r2_score(y_true,y_pred)
+
+              print(f"  MAE = {mae}")
+              print(f"  MSE = {mse}")
+              print(f"  RMSE = {rmse}")
+              print(f"  R2 = {r2score}")
+
+        print("訓練データスコア")
+        get_eval_score(y_train,y_train_pred)
+        print("テストデータスコア")
+        get_eval_score(y_test,y_test_pred)
+
+        print(f"訓練データ正解率：{accuracy_score(y_train, y_train_pred)}")
+        print(f"テストデータ正解率：{accuracy_score(y_test, y_test_pred)}")
+
+        matrix = confusion_matrix(y_test, y_test_pred)
+        print(matrix)
+        sns.heatmap(matrix.T, square=True, annot=True)
+        plt.xlabel("True Label")
+        plt.ylabel("Pred Label")
+        plt.show()
+
+        filename = 'test_model.pkl'
+        pickle.dump(grid, open(filename, 'wb'))
 
 
     def show_buysellpoint(self, df):
@@ -464,7 +547,6 @@ class AutoTrade:
             連続GC/DC回数と、WEIGHT_OF_PRICE(重み付け)から売り買い価格を決める
             """
             BUYSELLprice = yen_price * oneline_df['GCDC_times'][0] * self.param.WEIGHT_OF_PRICE
-            print("")
             # BUYSELLprice = yen_price * np.log10(oneline_df['GCDC_times'][0])
         elif price_decision_logic == 2 and oneline_df is not None:
             """
@@ -472,7 +554,7 @@ class AutoTrade:
             売り価格は所持仮想通貨数(coin)、買い価格は所持日本円(jpy)から決める
             """
             gcdt_times = oneline_df['GCDC_times'][0]
-            weight = (gcdt_times/MA_times * self.param.WEIGHT_OF_PRICE)*0.3
+            weight = (gcdt_times/self.param.MA_times * self.param.WEIGHT_OF_PRICE)*0.3
             #self.logger.debug(f"{weight=:.2%}")
             ma_diff = oneline_df['ma_diff'][0]
 
@@ -482,6 +564,7 @@ class AutoTrade:
             elif ma_diff > 0:
                 # 買い
                 BUYSELLprice = jpy*weight
+                
         elif price_decision_logic == -1:
             """
             n単位時間後の価格変化率(pct_chg)から売り買い価格を決める
@@ -495,8 +578,6 @@ class AutoTrade:
                 # 買い
                 BUYSELLprice = jpy*np.abs(pct_chg*2.0)
 
-            # BUYSELLprice = yen_price * (1.0+np.abs(oneline_df['_CLOSE_PCT_CHANGE'][0]))*4
-
         return BUYSELLprice
 
 
@@ -509,7 +590,7 @@ class AutoTrade:
             sys.exit()
 
         if len(minus_jpy) != 0:
-            print(f"Error: 所持日本円: {minus_coin['JPY'].iloc[-1]}")
+            print(f"Error: 所持日本円: {minus_jpy['JPY'].iloc[-1]}")
             sys.exit()
 
 
@@ -649,7 +730,8 @@ class AutoTrade:
                 # 売り買いして、
                 if df.at[i, 'Songiri'] == False:
                     # それが損切りの売買でない場合
-                    print(f"★売り買い：{df.at[i, 'BUYSELL']} 時刻：{i} 価格：{df.at[i, 'Close']}")
+                    print(f"★売り買い：{df.at[i, 'BUYSELL']} 時刻：{i} 価格：{df.at[i, 'Close']}\
+所持日本円:{df.at[i, 'JPY']} 所持コイン:{df.at[i, 'Coin']} 資産:{df.at[i, 'SimulateAsset']:.0f}")
                     position_df = position_df.append(df.loc[i])
 
             self.check_minus(df)
@@ -958,6 +1040,9 @@ class AutoTrade:
         argparser.add_argument('-s', action='store_true', help='Simulate mode.') # シミュレートモード
         argparser.add_argument('--logic') # 売買価格決定ロジックの指定
         argparser.add_argument('-o') # シミュレート結果CSVの出力先指定
+        argparser.add_argument('--nosongiri', action='store_false', help='No Songiri mode.') # 損切するかしないか。デフォルトは損切する
+        argparser.add_argument('--mlmodel') # 機械学習モデルのファイル名
+        argparser.add_argument('--pdl') # price_decision_logic
         args = argparser.parse_args()
 
         # DataFrameの最大表示行数
@@ -977,6 +1062,11 @@ class AutoTrade:
         # 移動平均(MA)を計算、設定
         df = self.set_ma(df)
 
+        # NaNを含む行を削除
+        print(df.head())
+        df = df.dropna()
+        print(df.head())
+
         # 対象通貨の現在の価格
         coin_price = df['Close'][-1]
 
@@ -993,6 +1083,19 @@ class AutoTrade:
             if args.logic is not None:
                 self.param.LOGIC = int(args.logic)
                 output_filename = args.o
+
+            if args.nosongiri is not None:
+                self.param.SONGIRI = args.nosongiri
+
+            if args.mlmodel is not None:
+                self.param.ml_model = args.mlmodel
+
+            if args.pdl is not None:
+                self.param.PDL = int(args.pdl)
+
+            # 機械学習モデルのロード
+            if args.mlmodel is not None:
+                self.model = pickle.load(open(args.mlmodel, 'rb'))
 
             # シミュレーション開始
             sim_df = self.simulate(df,
@@ -1038,7 +1141,8 @@ class AutoTrade:
 
 
 if __name__ == "__main__":
-    param = Parameter()
+    param = Parameter(buy_price=100, sell_price=100)
     at = AutoTrade(param)
 
     at.main()
+        # at.ml()
