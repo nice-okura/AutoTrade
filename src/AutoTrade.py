@@ -356,7 +356,7 @@ class AutoTrade:
             """
             機械学習のモデルを読み込んで売り買い判定する
             """
-            df = df.drop(['BUYSELL', '_CLOSE_PCT_CHANGE', 'SimulateAsset', 'Profit', 'Coin', 'JPY', 'Songiri', 'BUYSELL_PRICE'], axis=1)
+            df = df[["BBANDS_upperband", "BBANDS_middleband", "BBANDS_lowerband", "MA_SHORT", "MA_LONG", "MIDPOINT", "MACD_macd", "MACD_macdsignal", "MACD_macdhist", "RSI", "OBV", "ATR", "STDDEV", "_CLOSE_PCT_CHANGE", "STOCH_slowk", "STOCH_slowd", "STOCHRSI_fastk", "STOCHRSI_fastd", "Coin", "JPY"]]
             # df = df.drop(['BUYSELL', '_CLOSE_PCT_CHANGE', 'SimulateAsset', 'Profit', 'Coin', 'JPY', 'Songiri'], axis=1)
             pred_df = self.model.predict(df[-1:])
             if int(pred_df[0]) < -10000:
@@ -447,7 +447,7 @@ class AutoTrade:
             ５単位時間後にどのくらい価格変化するかを表した指標（_CLOSE_PCT_CHANGE）が
             border%以上変化する場合、売買する。
             """
-            border = 0.01
+            border = 0.05
 
             if df['_CLOSE_PCT_CHANGE'][-1] >= border:
                 buysell = BUY
@@ -461,12 +461,12 @@ class AutoTrade:
 
 
     def ml(self):
-        df = pd.read_csv('./sampledata_30days_logic-1_pdl-1_bsprice.csv')
+        df = pd.read_csv('./sampledata_365days_logic-1_pdl-1.csv')
         df = df.set_index('Date')
         df = df.astype(float)
         df = df.dropna()
 
-        X = df.drop(['BUYSELL', '_CLOSE_PCT_CHANGE', 'SimulateAsset', 'Profit', 'Coin', 'JPY', 'Songiri', 'GachihoAsset', 'GachihoProfit', 'BUYSELL_PRICE'], axis=1)
+        X = df[["BBANDS_upperband", "BBANDS_middleband", "BBANDS_lowerband", "MA_SHORT", "MA_LONG", "MIDPOINT", "MACD_macd", "MACD_macdsignal", "MACD_macdhist", "RSI", "OBV", "ATR", "STDDEV", "_CLOSE_PCT_CHANGE", "STOCH_slowk", "STOCH_slowd", "STOCHRSI_fastk", "STOCHRSI_fastd", "Coin", "JPY"]]
         y = df[['BUYSELL_PRICE']]
 
         X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=0)
@@ -564,9 +564,9 @@ class AutoTrade:
             """
             機械学習のモデルを読み込んで売り買い判定する
             """
-            oneline_df = oneline_df.drop(['BUYSELL', '_CLOSE_PCT_CHANGE', 'SimulateAsset', 'Profit', 'Coin', 'JPY', 'Songiri', 'BUYSELL_PRICE'], axis=1)
-            pred_df = self.model.predict(oneline_df[-1:])
-            BUYSELLprice = abs(int(pred_df))/100
+            oneline_df = oneline_df[["BBANDS_upperband", "BBANDS_middleband", "BBANDS_lowerband", "MA_SHORT", "MA_LONG", "MIDPOINT", "MACD_macd", "MACD_macdsignal", "MACD_macdhist", "RSI", "OBV", "ATR", "STDDEV", "_CLOSE_PCT_CHANGE", "STOCH_slowk", "STOCH_slowd", "STOCHRSI_fastk", "STOCHRSI_fastd", "Coin", "JPY"]]
+            pred_df = self.model.predict(oneline_df[-1:])/20
+            BUYSELLprice = abs(int(pred_df))
         elif price_decision_logic == 0:
             """
             パラメータで設定した価格で一律売買（重みづけなどなし）
@@ -604,10 +604,12 @@ class AutoTrade:
             pct_chg = oneline_df['_CLOSE_PCT_CHANGE'][0]
             if pct_chg < 0:
                 # 売り
-                BUYSELLprice = coin*coin_price*np.abs(pct_chg*2.0)
+                # BUYSELLprice = coin_price*np.abs(pct_chg*2.0)
+                BUYSELLprice = coin*coin_price*0.1*np.abs(pct_chg*2.0)
             elif pct_chg > 0:
                 # 買い
-                BUYSELLprice = jpy*np.abs(pct_chg*2.0)
+                BUYSELLprice = jpy*0.1*np.abs(pct_chg*2.0)
+                # BUYSELLprice = jpy*np.abs(pct_chg*2.0)
 
         return BUYSELLprice
 
@@ -616,14 +618,16 @@ class AutoTrade:
         minus_coin = df.query('Coin < 0')
         minus_jpy = df.query('JPY < 0')
 
+        return_status = 0
         if len(minus_coin) != 0:
             print(f"Error: 所持コイン数: {minus_coin['Coin'].iloc[-1]}") # iloc[-1]でSeries型の値のみ取り出す
-            sys.exit()
+            return_status = -1
 
         if len(minus_jpy) != 0:
             print(f"Error: 所持日本円: {minus_jpy['JPY'].iloc[-1]}")
-            sys.exit()
+            return_status = -1
 
+        return return_status
 
     def songiri(self, df, position_df, coin_price, coin, yen, tmp_df):
         """ 今の価格にて、これまでの売り買いポジションから、perc%以上の損失が出ている場合、
@@ -765,11 +769,12 @@ class AutoTrade:
                 if df.at[i, 'Songiri'] == False:
                     # それが損切りの売買でない場合
                     print(f"★売り買い：{df.at[i, 'BUYSELL']} 時刻：{i} 価格：{df.at[i, 'Close']} \
-所持日本円:{df.at[i, 'JPY']} 所持コイン:{df.at[i, 'Coin']} 資産:{df.at[i, 'SimulateAsset']:.0f}")
+所持日本円:{df.at[i, 'JPY']} 所持コイン:{df.at[i, 'Coin']} 資産:{df.at[i, 'SimulateAsset']:.0f} 利益率：{1+df.at[i, 'Profit']/init_asset:.2%}")
                     position_df = position_df.append(df.loc[i])
 
-
-            self.check_minus(df)
+            # 所持コイン、所持日本円がマイナスになったら強制終了
+            if self.check_minus(df) == -1:
+                break
 
         return df
 
@@ -1091,9 +1096,10 @@ class AutoTrade:
         else:
             # 前日までのデータを収集
             date = datetime.now() - timedelta(days=1)
-            df = self.get_ohlcv(date, MA_long*2, CANDLE_TYPE)
-            # df = get_ohlcv(date, 24*200, CANDLE_TYPE)
-
+            # df = self.get_ohlcv(date, MA_long*2, CANDLE_TYPE)
+            df = self.get_ohlcv(date, 24*365, self.param.CANDLE_TYPE)
+            df.to_csv("./sampledata_365days_ohlcv.csv")
+            sys.exit()
         # 移動平均(MA)を計算、設定
         df = self.set_ma(df)
 
@@ -1117,6 +1123,8 @@ class AutoTrade:
             # コマンドライン引数からパラメータ取得
             if args.logic is not None:
                 self.param.LOGIC = int(args.logic)
+
+            if args.o is not None:
                 output_filename = args.o
 
             if args.nosongiri is not None:
@@ -1179,5 +1187,5 @@ if __name__ == "__main__":
     param = Parameter(buy_price=100, sell_price=100)
     at = AutoTrade(param)
 
-    at.main()
-    # at.ml()
+    # at.main()
+    at.ml()
