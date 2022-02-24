@@ -11,19 +11,7 @@ from argparse import ArgumentParser
 import matplotlib.pyplot as plt
 from pprint import pprint as pp
 import talib
-import pickle
-
-from sklearn.model_selection import GridSearchCV
-from sklearn.model_selection import KFold
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.model_selection import train_test_split
-from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
-from sklearn.metrics import accuracy_score
-from sklearn.metrics import confusion_matrix
-from sklearn.model_selection import RandomizedSearchCV
-
-import lightgbm as lgb
-import seaborn as sns
+from ML import MachineLearning
 
 DEBUG = True
 
@@ -75,7 +63,7 @@ class AutoTrade:
     def __init__(self, param):
         self.param = param
         self.cs = CryptService(URL, PUBLIC_URL, os.environ['API_KEY'], os.environ['API_SECRET'], "bitbank")
-        self.model = None
+        self.ml = None
 
         # 1. ロガーを取得する
         logger = logging.getLogger(__name__)
@@ -258,21 +246,6 @@ class AutoTrade:
         return ma_diff, times_list
 
 
-    # RSIを計算
-    # def get_rsi(self, df):
-    #     # RSI計算
-    #     diff = df['Close'] - df['Open']
-    #     up, down = diff.copy(), diff.copy()
-    #     up[up < 0] = 0
-    #     down[down > 0] = 0
-    #     up_sma_14 = up.rolling(window=14, center=False).mean()
-    #     down_sma_14 = down.abs().rolling(window=14, center=False).mean()
-    #     rs = up_sma_14 / down_sma_14
-    #     rsi = 100.0 - (100.0 / (1.0 + rs))
-    #
-    #     return rsi
-    #
-
     # 連続times x n回 DCまたはGCを継続しているか判定
     def is_gcdc(self, df, times):
         return df['GCDC_times'][-1] % times == 0
@@ -352,16 +325,16 @@ class AutoTrade:
         """
             メインの売り買いロジック
         """
-        if self.model is not None:
+        if self.ml is not None:
             """
             機械学習のモデルを読み込んで売り買い判定する
             """
             df = df[["BBANDS_upperband", "BBANDS_middleband", "BBANDS_lowerband", "MA_SHORT", "MA_LONG", "MIDPOINT", "MACD_macd", "MACD_macdsignal", "MACD_macdhist", "RSI", "OBV", "ATR", "STDDEV", "_CLOSE_PCT_CHANGE", "STOCH_slowk", "STOCH_slowd", "STOCHRSI_fastk", "STOCHRSI_fastd", "Coin", "JPY"]]
             # df = df.drop(['BUYSELL', '_CLOSE_PCT_CHANGE', 'SimulateAsset', 'Profit', 'Coin', 'JPY', 'Songiri'], axis=1)
-            pred_df = self.model.predict(df[-1:])
-            if int(pred_df[0]) < -10000:
+            pred_df = self.ml.predict(df[-1:])
+            if int(pred_df[0]) < -500:
                 buysell = SELL
-            elif int(pred_df[0]) > 10000:
+            elif int(pred_df[0]) > 500:
                 buysell = BUY
 
             pass
@@ -460,99 +433,6 @@ class AutoTrade:
         return buysell
 
 
-    def ml(self):
-        df = pd.read_csv('./sampledata_365days_logic-1_pdl-1.csv')
-        df = df.set_index('Date')
-        df = df.astype(float)
-        df = df.dropna()
-
-        X = df[["BBANDS_upperband", "BBANDS_middleband", "BBANDS_lowerband", "MA_SHORT", "MA_LONG", "MIDPOINT", "MACD_macd", "MACD_macdsignal", "MACD_macdhist", "RSI", "OBV", "ATR", "STDDEV", "_CLOSE_PCT_CHANGE", "STOCH_slowk", "STOCH_slowd", "STOCHRSI_fastk", "STOCHRSI_fastd", "Coin", "JPY"]]
-        y = df[['BUYSELL_PRICE']]
-
-        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=0)
-
-        # params = {"n_estimators": np.arange(0,100,10),
-        #    "max_depth": np.arange(2,1000,2),
-        #    "num_leaves": np.arange(2,64,10),
-        #    "learning_rate": [0.1, 0.25, 0.5],
-        #    "random_state": [0]
-        #     }
-
-        """
-        ベストパラメータ：{'subsample_freq': 7, 'subsample': 1.0, 'reg_lambda': 0.1, 'reg_alpha': 0.1, 'num_leaves': 28, 'min_child_samples': 0, 'max_depth': 8, 'learning_rate': 0.1, 'colsample_bytree': 0.9}
-        ベストスコア:0.34351017839905695
-        テストデータスコア
-          MAE = 3599.230467237557
-          MSE = 32515808.850873124
-          RMSE = 5702.263484869243
-          R2 = 0.30452972156647884
-
-        """
-        params = {'reg_alpha': [0.0001, 0.0003, 0.001, 0.003, 0.01, 0.03, 0.1],
-             'reg_lambda': [0.0001, 0.0003, 0.001, 0.003, 0.01, 0.03, 0.1],
-             'num_leaves': [2, 4, 8, 10, 14, 20, 28, 32],
-             'colsample_bytree': [0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0],
-             'subsample': [0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0],
-             'subsample_freq': [0, 1, 2, 3, 4, 5, 6, 7],
-             "learning_rate": [0.1, 0.25, 0.5],
-             "max_depth": [4, 8, 16, 32],
-             'min_child_samples': [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
-             }            # 学習時fitパラメータ指定
-        fit_params = {'verbose': 0,  # 学習中のコマンドライン出力
-            'early_stopping_rounds': 10,  # 学習時、評価指標がこの回数連続で改善しなくなった時点でストップ
-            'eval_metric': 'r2',  # early_stopping_roundsの評価指標
-            'eval_set': [(X_train, y_train)]  # early_stopping_roundsの評価指標算出用データ
-            }
-
-        reg = lgb.LGBMRegressor(boosting_type='gbdt', objective='regression', n_estimators=10000)
-        # reg = xgb.XGBRegressor(objective='reg:squarederror')
-        k_fold = KFold(n_splits=5, shuffle=True, random_state=0)
-        # grid = GridSearchCV(estimator=reg, param_grid=params, cv=k_fold, scoring="r2", verbose=2)
-        grid = RandomizedSearchCV(estimator=reg, param_distributions=params, scoring="r2", cv=k_fold, n_iter=1000, random_state=0, verbose=2)
-
-        grid.fit(X_train, y_train, **fit_params)
-
-        print(f"ベストパラメータ：{grid.best_params_}")
-        print(f"ベストスコア:{grid.best_score_}")
-
-        y_test_pred = grid.predict(X_test)
-        y_test_pred = np.expand_dims(y_test_pred, 1)
-
-        def get_eval_score(y_true,y_pred):
-
-              mae = mean_absolute_error(y_true,y_pred)
-              mse = mean_squared_error(y_true,y_pred)
-              rmse = np.sqrt(mse)
-              r2score = r2_score(y_true,y_pred)
-
-              print(f"  MAE = {mae}")
-              print(f"  MSE = {mse}")
-              print(f"  RMSE = {rmse}")
-              print(f"  R2 = {r2score}")
-
-        print("テストデータスコア")
-        get_eval_score(y_test, y_test_pred)
-
-        filename = 'test_model.pkl'
-        pickle.dump(grid, open(filename, 'wb'))
-
-
-    def show_buysellpoint(self, df):
-        """
-            過去のデータ(df)から、売り買いポイントをすべて表示
-        """
-        df['BUYSELL'] = 0
-
-        for i in range(len(df)):
-            tmp_df = df.iloc[i:i+1]
-            if self.buyORsell(tmp_df) == BUY:
-                df.iat[i, 8] = "BUY"
-            elif self.buyORsell(tmp_df) == SELL:
-                df.iat[i, 8] = "SELL"
-
-        self.logger.info("\n" + str(df.tail(100)))
-
-
     def get_BUYSELLprice(self, yen_price, coin_price, coin, jpy, oneline_df=None):
         """ 売買価格を決める
 
@@ -560,13 +440,15 @@ class AutoTrade:
         BUYSELLprice = 0.0
         price_decision_logic = self.param.PDL
 
-        if self.model is not None:
+        if self.ml is not None:
             """
             機械学習のモデルを読み込んで売り買い判定する
             """
             oneline_df = oneline_df[["BBANDS_upperband", "BBANDS_middleband", "BBANDS_lowerband", "MA_SHORT", "MA_LONG", "MIDPOINT", "MACD_macd", "MACD_macdsignal", "MACD_macdhist", "RSI", "OBV", "ATR", "STDDEV", "_CLOSE_PCT_CHANGE", "STOCH_slowk", "STOCH_slowd", "STOCHRSI_fastk", "STOCHRSI_fastd", "Coin", "JPY"]]
-            pred_df = self.model.predict(oneline_df[-1:])/20
+            pred_df = self.ml.predict(oneline_df[-1:])
             BUYSELLprice = abs(int(pred_df))
+            # BUYSELLprice = 1000
+
         elif price_decision_logic == 0:
             """
             パラメータで設定した価格で一律売買（重みづけなどなし）
@@ -628,6 +510,7 @@ class AutoTrade:
             return_status = -1
 
         return return_status
+
 
     def songiri(self, df, position_df, coin_price, coin, yen, tmp_df):
         """ 今の価格にて、これまでの売り買いポジションから、perc%以上の損失が出ている場合、
@@ -693,7 +576,7 @@ class AutoTrade:
         return df, position_df, coin, yen
 
 
-    def simulate(self, df, init_yen=100000, init_coin=100):
+    def simulate(self, df, init_yen=100000.0, init_coin=100.0):
         # self.logger.debug("## simulate ")
         """
             過去データ(df)から実際に売買した場合の総資産や利益を計算し、dfに追加して返す
@@ -729,26 +612,38 @@ class AutoTrade:
             coin_price = tmp_df['Close'][0]  # 購入する仮想通貨の現在の価格
 
             pct_chg = tmp_df['_CLOSE_PCT_CHANGE'][0]
-            # print(f"Date: {i.strftime('%Y/%m/%d %H:%M:%S')} Close:{r['Close']}")
 
             if self.buyORsell(tmp_df) == BUY:
-                df.at[i, 'BUYSELL'] = BUY
+                """
+                購　入
+                """
                 buy_price = self.get_BUYSELLprice(self.param.BUY_PRICE, coin_price, coin, yen, oneline_df=tmp_df)  # 購入する仮想通貨の枚数
-                yen -= buy_price
-                coin += buy_price/coin_price
-                #self.logger.debug(f'[BUY]{tmp_df.index.strftime("%Y/%m/%d %H:%M")[0]}: BUY_PRICE: {buy_price:.2f} {coin=:.2f}')
-                #self.logger.debug(f'   PCT_CHG:{pct_chg:.2%} jpy:{yen}')
-                df.at[i, 'BUYSELL_PRICE'] = buy_price
+
+                if yen > buy_price:
+                    df.at[i, 'BUYSELL'] = BUY
+                    yen -= buy_price
+                    coin += buy_price/coin_price
+                    #self.logger.debug(f'[BUY]{tmp_df.index.strftime("%Y/%m/%d %H:%M")[0]}: BUY_PRICE: {buy_price:.2f} {coin=:.2f}')
+                    #self.logger.debug(f'   PCT_CHG:{pct_chg:.2%} jpy:{yen}')
+                    df.at[i, 'BUYSELL_PRICE'] = buy_price
+                else:
+                    print(f"{buy_price-yen:.0f}円 不足")
 
             elif self.buyORsell(tmp_df) == SELL:
-                df.at[i, 'BUYSELL'] = SELL
-
+                """
+                売　却
+                """
                 sell_price = self.get_BUYSELLprice(self.param.SELL_PRICE, coin_price, coin, yen, oneline_df=tmp_df)  # 購入する仮想通貨の枚数
-                yen += sell_price
-                coin -= sell_price/coin_price
-                #self.logger.debug(f'[SELL]{tmp_df.index.strftime("%Y/%m/%d %H:%M")[0]}: SELL_PRICE: {sell_price:.2f} {coin=:.2f}')
-                #self.logger.debug(f'   PCT_CHG:{pct_chg:.2%} coin:{coin}')
-                df.at[i, 'BUYSELL_PRICE'] = -sell_price
+
+                if coin > sell_price/coin_price:
+                    df.at[i, 'BUYSELL'] = SELL
+                    yen += sell_price
+                    coin -= sell_price/coin_price
+                    #self.logger.debug(f'[SELL]{tmp_df.index.strftime("%Y/%m/%d %H:%M")[0]}: SELL_PRICE: {sell_price:.2f} {coin=:.2f}')
+                    #self.logger.debug(f'   PCT_CHG:{pct_chg:.2%} coin:{coin}')
+                    df.at[i, 'BUYSELL_PRICE'] = -sell_price
+                else:
+                    print(f"{sell_price/coin_price - coin:.1f}コイン 不足")
 
             elif len(position_df) != 0 and self.param.LOGIC != 10 and self.param.SONGIRI == True:
                 # 損切り
@@ -768,8 +663,8 @@ class AutoTrade:
                 # 売り買いして、
                 if df.at[i, 'Songiri'] == False:
                     # それが損切りの売買でない場合
-                    print(f"★売り買い：{df.at[i, 'BUYSELL']} 時刻：{i} 価格：{df.at[i, 'Close']} \
-所持日本円:{df.at[i, 'JPY']} 所持コイン:{df.at[i, 'Coin']} 資産:{df.at[i, 'SimulateAsset']:.0f} 利益率：{1+df.at[i, 'Profit']/init_asset:.2%}")
+                    # print(f"[{'買い' if df.at[i, 'BUYSELL'] == BUY else '売り'}:{i.strftime('%Y/%m/%d %H:%M:%S')}] 売買価格：{abs(df.at[i, 'BUYSELL_PRICE']):.1f} \
+# 円:{df.at[i, 'JPY']:.0f} コイン:{df.at[i, 'Coin']:.1f} 資産:{df.at[i, 'SimulateAsset']:.0f} 利益率：{1+df.at[i, 'Profit']/init_asset:.1%}")
                     position_df = position_df.append(df.loc[i])
 
             # 所持コイン、所持日本円がマイナスになったら強制終了
@@ -819,8 +714,8 @@ class AutoTrade:
         # 売買ポイント
         buydf = df[df['BUYSELL'] == 1]
         selldf = df[df['BUYSELL'] == -1]
-        plt.scatter(buydf.index, buydf['Close'], label='BUY', color='red')
-        plt.scatter(selldf.index, selldf['Close'], label='SELL', color='blue')
+        plt.scatter(buydf.index, buydf['Close'], label='BUY', color='red', s=10)
+        plt.scatter(selldf.index, selldf['Close'], label='SELL', color='blue', s=10)
 
         plt.legend()
         plt.xlim(df.index[0], df.index[-1])
@@ -1082,110 +977,129 @@ class AutoTrade:
         argparser.add_argument('-o') # シミュレート結果CSVの出力先指定
         argparser.add_argument('--nosongiri', action='store_false', help='No Songiri mode.') # 損切するかしないか。デフォルトは損切する
         argparser.add_argument('--mlmodel') # 機械学習モデルのファイル名
+        argparser.add_argument('--mlinput') # 機械学習するinputファイル名
         argparser.add_argument('--pdl') # price_decision_logic
+
         args = argparser.parse_args()
 
         # DataFrameの最大表示行数
         pd.set_option('display.max_rows', 100)
 
-        if args.l is not None:
-            # CSVファイルからOHLCVデータを読み取り
-            df = self.load_csv2pd(args.l)
+        if args.mlinput is not None:
+            """
+            機械学習のみ
+            """
+            input_filename = args.mlinput
+            df = pd.read_csv(input_filename)
+            df = df.set_index('Date')
+            df = df.astype(float)
+            df = df.dropna()
+
+            X = df[["BBANDS_upperband", "BBANDS_middleband", "BBANDS_lowerband", "MA_SHORT", "MA_LONG", "MIDPOINT", "MACD_macd", "MACD_macdsignal", "MACD_macdhist", "RSI", "OBV", "ATR", "STDDEV", "_CLOSE_PCT_CHANGE", "STOCH_slowk", "STOCH_slowd", "STOCHRSI_fastk", "STOCHRSI_fastd", "Coin", "JPY"]]
+            y = df[['BUYSELL_PRICE']]
+
+            # 学習実施
+            self.ml = MachineLearning()
+            self.ml.learn(X, y, 'test_model.pkl')
+
+        else:
+            """
+            売買
+            """
+            # OHLCVデータ読み込み
+            if args.l is not None:
+                # CSVファイルからOHLCVデータを読み取り
+                df = self.load_csv2pd(args.l)
+
+            else:
+                # 前日までのデータを収集
+                date = datetime.now() - timedelta(days=1)
+                # df = self.get_ohlcv(date, MA_long*2, CANDLE_TYPE)
+                df = self.get_ohlcv(date, 24*365, self.param.CANDLE_TYPE)
+                # df.to_csv("./sampledata_365days_ohlcv.csv")
+                # sys.exit()
+
+            # 特徴量計算
             df = self.calc_features(df)
+            df = self.set_ma(df)
 
-        else:
-            # 前日までのデータを収集
-            date = datetime.now() - timedelta(days=1)
-            # df = self.get_ohlcv(date, MA_long*2, CANDLE_TYPE)
-            df = self.get_ohlcv(date, 24*365, self.param.CANDLE_TYPE)
-            df.to_csv("./sampledata_365days_ohlcv.csv")
-            sys.exit()
-        # 移動平均(MA)を計算、設定
-        df = self.set_ma(df)
+            # NaNを含む行を削除
+            df = df.dropna()
 
-        # NaNを含む行を削除
-        print(df.head())
-        df = df.dropna()
-        print(df.head())
+            # 対象通貨の現在の価格
+            coin_price = df['Close'][-1]
 
-        # 対象通貨の現在の価格
-        coin_price = df['Close'][-1]
+            if args.s is not None:
+                """
+                シミュレーションモード
+                """
 
-        # # 目標変数を設定
-        # set_y(df)
+                # 初期パラメータ設定
+                init_yen = 100000.0
+                init_coin = 100.0
+                output_filename = ""
 
-        if args.s is not None:
-            # 初期パラメータ設定
-            init_yen = 100000
-            init_coin = 100
-            output_filename = ""
+                # コマンドライン引数からパラメータ取得
+                if args.logic is not None:
+                    self.param.LOGIC = int(args.logic)
 
-            # コマンドライン引数からパラメータ取得
-            if args.logic is not None:
-                self.param.LOGIC = int(args.logic)
+                if args.o is not None:
+                    output_filename = args.o
 
-            if args.o is not None:
-                output_filename = args.o
+                if args.nosongiri is not None:
+                    self.param.SONGIRI = args.nosongiri
 
-            if args.nosongiri is not None:
-                self.param.SONGIRI = args.nosongiri
+                if args.pdl is not None:
+                    self.param.PDL = int(args.pdl)
 
-            if args.mlmodel is not None:
-                self.param.ml_model = args.mlmodel
+                # 機械学習モデルの読み込み
+                if args.mlmodel is not None:
+                    self.ml = MachineLearning(model_file=args.mlmodel)
 
-            if args.pdl is not None:
-                self.param.PDL = int(args.pdl)
+                # シミュレーション開始
+                sim_df = self.simulate(df,
+                    init_yen=init_yen,
+                    init_coin=init_coin)
 
-            # 機械学習モデルのロード
-            if args.mlmodel is not None:
-                self.model = pickle.load(open(args.mlmodel, 'rb'))
+                # 結果（利益）表示
+                print(f"シミュレーション利益:{sim_df['Profit'][-1]:.0f}円({1+sim_df['Profit'][-1]/sim_df['SimulateAsset'][0]:.2%})")
+                print(f"ガチホ時の利益:{sim_df['GachihoProfit'][-1]:.0f}円({1+sim_df['GachihoProfit'][-1]/sim_df['SimulateAsset'][0]:.2%})")
+                print(f"ガチホと比較した効果：{sim_df['SimulateAsset'][-1]/sim_df['GachihoAsset'][-1]:.2%}")
 
-            # シミュレーション開始
-            sim_df = self.simulate(df,
-                init_yen=init_yen,
-                init_coin=init_coin)
+                # シミュレート結果のファイル出力
+                if output_filename != "":
+                    sim_df.to_csv(output_filename)
 
-            # 結果（利益）表示
-            print(f"シミュレーション利益:{sim_df['Profit'][-1]:.0f}円({1+sim_df['Profit'][-1]/sim_df['SimulateAsset'][0]:.2%})")
+                # グラフ描画
+                self.save_gragh(sim_df, "simulate00.png")
 
-            # はじめからガチホしていた場合
-            print(f"ガチホ時の利益:{sim_df['GachihoProfit'][-1]:.0f}円({1+sim_df['GachihoProfit'][-1]/sim_df['SimulateAsset'][0]:.2%})")
+                # df内の各パラメータの相関を確認
+                # import seaborn as sns
+                # df_corr = df.corr()
+                # plt.figure(figsize=(60,40))
+                # sns.heatmap(df_corr, annot=True)
+                # plt.title("Corr Heatmap")
+                # plt.savefig("heatmap.png", format="png")
 
-            # 利益 / ガチホ利益
-            print(f"ガチホと比較した効果：{sim_df['SimulateAsset'][-1]/sim_df['GachihoAsset'][-1]:.2%}")
+            else:
+                """
+                実際の取引
+                """
+                if self.buyORsell(df) == SELL:
+                    # ##################
+                    # 売　却
+                    # ##################
+                    self.order(SELL, SELL_PRICE, coin_price)
 
-            # シミュレート結果のファイル出力
-            if output_filename != "":
-                sim_df.to_csv(output_filename)
-
-            # グラフ描画
-            self.save_gragh(sim_df, "simulate00.png")
-
-            # df内の各パラメータの相関を確認
-            # import seaborn as sns
-            # df_corr = df.corr()
-            # plt.figure(figsize=(60,40))
-            # sns.heatmap(df_corr, annot=True)
-            # plt.title("Corr Heatmap")
-            # plt.savefig("heatmap.png", format="png")
-
-        else:
-            if self.buyORsell(df) == SELL:
-                # ##################
-                # 売　却
-                # ##################
-                self.order(SELL, SELL_PRICE, coin_price)
-
-            elif self.buyORsell(df) == BUY:
-                # ##################
-                # 購　入
-                # ##################
-                self.order(BUY, BUY_PRICE, coin_price)
+                elif self.buyORsell(df) == BUY:
+                    # ##################
+                    # 購　入
+                    # ##################
+                    self.order(BUY, BUY_PRICE, coin_price)
 
 
 if __name__ == "__main__":
     param = Parameter(buy_price=100, sell_price=100)
     at = AutoTrade(param)
 
-    # at.main()
-    at.ml()
+    at.main()
