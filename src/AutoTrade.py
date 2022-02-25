@@ -332,9 +332,13 @@ class AutoTrade:
             df = df[["BBANDS_upperband", "BBANDS_middleband", "BBANDS_lowerband", "MA_SHORT", "MA_LONG", "MIDPOINT", "MACD_macd", "MACD_macdsignal", "MACD_macdhist", "RSI", "OBV", "ATR", "STDDEV", "_CLOSE_PCT_CHANGE", "STOCH_slowk", "STOCH_slowd", "STOCHRSI_fastk", "STOCHRSI_fastd", "Coin", "JPY"]]
             # df = df.drop(['BUYSELL', '_CLOSE_PCT_CHANGE', 'SimulateAsset', 'Profit', 'Coin', 'JPY', 'Songiri'], axis=1)
             pred_df = self.ml.predict(df[-1:])
-            if int(pred_df[0]) < -500:
+            yen = df['JPY'][-1]
+            print(f"{df['JPY']=}")
+            border = yen*0.05
+            print(f"{border=}")
+            if int(pred_df[0]) < -border:
                 buysell = SELL
-            elif int(pred_df[0]) > 500:
+            elif int(pred_df[0]) > border:
                 buysell = BUY
 
             pass
@@ -433,6 +437,10 @@ class AutoTrade:
         return buysell
 
 
+    def fee(self, buysell_price):
+        return buysell_price*0.0002
+
+
     def get_BUYSELLprice(self, yen_price, coin_price, coin, jpy, oneline_df=None):
         """ 売買価格を決める
 
@@ -487,10 +495,10 @@ class AutoTrade:
             if pct_chg < 0:
                 # 売り
                 # BUYSELLprice = coin_price*np.abs(pct_chg*2.0)
-                BUYSELLprice = coin*coin_price*0.1*np.abs(pct_chg*2.0)
+                BUYSELLprice = coin*coin_price*np.abs(pct_chg*2.0)
             elif pct_chg > 0:
                 # 買い
-                BUYSELLprice = jpy*0.1*np.abs(pct_chg*2.0)
+                BUYSELLprice = jpy*np.abs(pct_chg*2.0)
                 # BUYSELLprice = jpy*np.abs(pct_chg*2.0)
 
         return BUYSELLprice
@@ -621,7 +629,7 @@ class AutoTrade:
 
                 if yen > buy_price:
                     df.at[i, 'BUYSELL'] = BUY
-                    yen -= buy_price
+                    yen -= (buy_price + self.fee(buy_price))
                     coin += buy_price/coin_price
                     #self.logger.debug(f'[BUY]{tmp_df.index.strftime("%Y/%m/%d %H:%M")[0]}: BUY_PRICE: {buy_price:.2f} {coin=:.2f}')
                     #self.logger.debug(f'   PCT_CHG:{pct_chg:.2%} jpy:{yen}')
@@ -637,7 +645,7 @@ class AutoTrade:
 
                 if coin > sell_price/coin_price:
                     df.at[i, 'BUYSELL'] = SELL
-                    yen += sell_price
+                    yen += (sell_price - self.fee(sell_price))
                     coin -= sell_price/coin_price
                     #self.logger.debug(f'[SELL]{tmp_df.index.strftime("%Y/%m/%d %H:%M")[0]}: SELL_PRICE: {sell_price:.2f} {coin=:.2f}')
                     #self.logger.debug(f'   PCT_CHG:{pct_chg:.2%} coin:{coin}')
@@ -663,8 +671,14 @@ class AutoTrade:
                 # 売り買いして、
                 if df.at[i, 'Songiri'] == False:
                     # それが損切りの売買でない場合
-                    # print(f"[{'買い' if df.at[i, 'BUYSELL'] == BUY else '売り'}:{i.strftime('%Y/%m/%d %H:%M:%S')}] 売買価格：{abs(df.at[i, 'BUYSELL_PRICE']):.1f} \
-# 円:{df.at[i, 'JPY']:.0f} コイン:{df.at[i, 'Coin']:.1f} 資産:{df.at[i, 'SimulateAsset']:.0f} 利益率：{1+df.at[i, 'Profit']/init_asset:.1%}")
+                    bs = df.at[i, 'BUYSELL']
+                    t = i.strftime('%Y/%m/%d %H:%M:%S')
+                    p = abs(df.at[i, 'BUYSELL_PRICE'])
+                    y = df.at[i, 'JPY']
+                    c = df.at[i, 'Coin']
+                    ast = df.at[i, 'SimulateAsset']
+                    pp = 1+df.at[i, 'Profit']/init_asset
+                    print(f"[{'買い' if bs == BUY else '売り'}:{t}] 売買価格：{p:.0f} 円：{y:.0f} コイン：{c:.1f} 資産：{ast:.0f} 利益率：{pp:.1%}")
                     position_df = position_df.append(df.loc[i])
 
             # 所持コイン、所持日本円がマイナスになったら強制終了
@@ -995,7 +1009,25 @@ class AutoTrade:
             df = df.astype(float)
             df = df.dropna()
 
-            X = df[["BBANDS_upperband", "BBANDS_middleband", "BBANDS_lowerband", "MA_SHORT", "MA_LONG", "MIDPOINT", "MACD_macd", "MACD_macdsignal", "MACD_macdhist", "RSI", "OBV", "ATR", "STDDEV", "_CLOSE_PCT_CHANGE", "STOCH_slowk", "STOCH_slowd", "STOCHRSI_fastk", "STOCHRSI_fastd", "Coin", "JPY"]]
+            X = df[["BBANDS_upperband",
+                    "BBANDS_middleband",
+                    "BBANDS_lowerband",
+                    "MA_SHORT",
+                    "MA_LONG",
+                    "MIDPOINT",
+                    "MACD_macd",
+                    "MACD_macdsignal",
+                    "MACD_macdhist",
+                    "RSI",
+                    "OBV",
+                    "ATR",
+                    "STDDEV",
+                    "STOCH_slowk", 
+                    "STOCH_slowd",
+                    "STOCHRSI_fastk",
+                    "STOCHRSI_fastd",
+                    "Coin",
+                    "JPY"]]
             y = df[['BUYSELL_PRICE']]
 
             # 学習実施
@@ -1013,26 +1045,27 @@ class AutoTrade:
 
             else:
                 # 前日までのデータを収集
-                date = datetime.now() - timedelta(days=1)
-                # df = self.get_ohlcv(date, MA_long*2, CANDLE_TYPE)
-                df = self.get_ohlcv(date, 24*365, self.param.CANDLE_TYPE)
+                date = datetime.now()# - timedelta(days=1)
+                df = self.get_ohlcv(date, 48, self.param.CANDLE_TYPE)
+                # df = self.get_ohlcv(date, 24*365, self.param.CANDLE_TYPE)
                 # df.to_csv("./sampledata_365days_ohlcv.csv")
                 # sys.exit()
 
-            # 特徴量計算
-            df = self.calc_features(df)
-            df = self.set_ma(df)
+            # 機械学習モデルの読み込み
+            if args.mlmodel is not None:
+                self.ml = MachineLearning(model_file=args.mlmodel)
 
-            # NaNを含む行を削除
-            df = df.dropna()
-
-            # 対象通貨の現在の価格
-            coin_price = df['Close'][-1]
-
-            if args.s is not None:
+            if args.s is True:
                 """
                 シミュレーションモード
                 """
+                # 特徴量計算
+                df = self.calc_features(df)
+                df = self.set_ma(df)
+                # NaNを含む行を削除
+                df = df.dropna()
+                # 対象通貨の現在の価格
+                coin_price = df['Close'][-1]
 
                 # 初期パラメータ設定
                 init_yen = 100000.0
@@ -1052,9 +1085,6 @@ class AutoTrade:
                 if args.pdl is not None:
                     self.param.PDL = int(args.pdl)
 
-                # 機械学習モデルの読み込み
-                if args.mlmodel is not None:
-                    self.ml = MachineLearning(model_file=args.mlmodel)
 
                 # シミュレーション開始
                 sim_df = self.simulate(df,
@@ -1085,16 +1115,50 @@ class AutoTrade:
                 """
                 実際の取引
                 """
+
+                # 最新のOHLCVデータを取得
+                latest_ohlcv = self.get_ohlcv(datetime.now(), 1, self.param.CANDLE_TYPE)
+                print(latest_ohlcv.tail(1))
+                df = df.append(latest_ohlcv.tail(1))
+                # 特徴量計算
+                df = self.calc_features(df)
+                df = df.drop(['_CLOSE_PCT_CHANGE'], axis=1) # 未来特徴量は削除
+                df = self.set_ma(df)
+                # print(df)
+                # df.to_csv('test.csv')
+                df = df.dropna()
+                # print(df)
+
                 if self.buyORsell(df) == SELL:
                     # ##################
                     # 売　却
                     # ##################
-                    self.order(SELL, SELL_PRICE, coin_price)
+                    buy_price = self.get_BUYSELLprice(self.param.BUY_PRICE, coin_price, coin, yen)  # 購入する仮想通貨の枚数
+
+                    if yen > buy_price:
+                        df['BUYSELL'][-1] = BUY
+                        yen -= (buy_price + self.fee(buy_price))
+                        coin += buy_price/coin_price
+                        df['BUYSELL_PRICE'][-1] = buy_price
+                    else:
+                        print(f"{buy_price-yen:.0f}円 不足")
+
+                    self.order(SELL, buy_price, coin_price)
 
                 elif self.buyORsell(df) == BUY:
                     # ##################
                     # 購　入
                     # ##################
+                    sell_price = self.get_BUYSELLprice(self.param.SELL_PRICE, coin_price, coin, yen)  # 購入する仮想通貨の枚数
+
+                    if coin > sell_price/coin_price:
+                        df['BUYSELL'][-1] = SELL
+                        yen += (sell_price - self.fee(sell_price))
+                        coin -= sell_price/coin_price
+                        df['BUYSELL_PRICE'][-1] = -sell_price
+                    else:
+                        print(f"{sell_price/coin_price - coin:.1f}コイン 不足")
+
                     self.order(BUY, BUY_PRICE, coin_price)
 
 
