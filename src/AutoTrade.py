@@ -3,6 +3,7 @@ from datetime import datetime
 from datetime import timedelta
 import os
 import sys
+import csv
 import pandas as pd
 import numpy as np
 import logging
@@ -12,6 +13,7 @@ import matplotlib.pyplot as plt
 from pprint import pprint as pp
 import talib
 from ML import MachineLearning
+import itertools
 
 DEBUG = True
 
@@ -64,6 +66,8 @@ class AutoTrade:
         self.param = param
         self.cs = CryptService(URL, PUBLIC_URL, os.environ['API_KEY'], os.environ['API_SECRET'], "bitbank")
         self.ml = None
+        self.features = ["Close", "Volume", "MA_SHORT", "MA_LONG", "MIDPOINT", "MACD_macdhist", "MACD_macd", "MACD_macdsignal", "RSI", "OBV", "ATR", "STDDEV", "Coin", "JPY"]
+        # self.features = ["BBANDS_upperband", "BBANDS_lowerband", "MA_SHORT", "MA_LONG", "MIDPOINT", "MACD_macdsignal", "RSI", "OBV", "ATR", "STDDEV", "STOCH_slowk", "STOCH_slowd", "STOCHRSI_fastk", "STOCHRSI_fastd", "Coin", "JPY"]
 
         # 1. ロガーを取得する
         logger = logging.getLogger(__name__)
@@ -329,7 +333,7 @@ class AutoTrade:
             """
             機械学習のモデルを読み込んで売り買い判定する
             """
-            df = df[["BBANDS_upperband", "BBANDS_middleband", "BBANDS_lowerband", "MA_SHORT", "MA_LONG", "MIDPOINT", "MACD_macd", "MACD_macdsignal", "MACD_macdhist", "RSI", "OBV", "ATR", "STDDEV", "_CLOSE_PCT_CHANGE", "STOCH_slowk", "STOCH_slowd", "STOCHRSI_fastk", "STOCHRSI_fastd", "Coin", "JPY"]]
+            df = df[self.features]
             # df = df.drop(['BUYSELL', '_CLOSE_PCT_CHANGE', 'SimulateAsset', 'Profit', 'Coin', 'JPY', 'Songiri'], axis=1)
             pred_df = self.ml.predict(df[-1:])
             yen = df['JPY'][-1]
@@ -452,7 +456,7 @@ class AutoTrade:
             """
             機械学習のモデルを読み込んで売り買い判定する
             """
-            oneline_df = oneline_df[["BBANDS_upperband", "BBANDS_middleband", "BBANDS_lowerband", "MA_SHORT", "MA_LONG", "MIDPOINT", "MACD_macd", "MACD_macdsignal", "MACD_macdhist", "RSI", "OBV", "ATR", "STDDEV", "_CLOSE_PCT_CHANGE", "STOCH_slowk", "STOCH_slowd", "STOCHRSI_fastk", "STOCHRSI_fastd", "Coin", "JPY"]]
+            oneline_df = oneline_df[self.features]
             pred_df = self.ml.predict(oneline_df[-1:])
             BUYSELLprice = abs(int(pred_df))
             # BUYSELLprice = 1000
@@ -1009,30 +1013,37 @@ class AutoTrade:
             df = df.astype(float)
             df = df.dropna()
 
-            X = df[["BBANDS_upperband",
-                    "BBANDS_middleband",
-                    "BBANDS_lowerband",
-                    "MA_SHORT",
-                    "MA_LONG",
-                    "MIDPOINT",
-                    "MACD_macd",
-                    "MACD_macdsignal",
-                    "MACD_macdhist",
-                    "RSI",
-                    "OBV",
-                    "ATR",
-                    "STDDEV",
-                    "STOCH_slowk",
-                    "STOCH_slowd",
-                    "STOCHRSI_fastk",
-                    "STOCHRSI_fastd",
-                    "Coin",
-                    "JPY"]]
-            y = df[['BUYSELL_PRICE']]
+            def all_combination(columns):
+                result = []
+                for n in range(1, len(columns)+1):
+                    for conb in itertools.combinations(columns, n):
+                        result.append(list(conb)) #タプルをリスト型に変換
 
-            # 学習実施
-            self.ml = MachineLearning()
-            self.ml.learn(X, y, 'test_model.pkl')
+                return result
+
+            ac = all_combination(self.features)
+            features_list = [f for f in ac if len(f) >= 8]
+
+            print(f"学習回数：{len(features_list)}")
+
+            ml_ret = {}
+
+            for f in features_list:
+                print(f)
+                # X = df[self.features]
+                X = df[f]
+                y = df[['BUYSELL_PRICE']]
+
+                # 学習実施
+                self.ml = MachineLearning()
+                score = self.ml.learn(X, y, 'test_model.pkl')
+
+                ml_ret[",".join(f)] = score
+
+            with open('ml_ret.csv', 'w') as f:
+                writer = csv.writer(f)
+                for k, v in ml_ret.items():
+                   writer.writerow([k, v])
 
         else:
             """
