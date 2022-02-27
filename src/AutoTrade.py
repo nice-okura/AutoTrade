@@ -66,7 +66,8 @@ class AutoTrade:
         self.param = param
         self.cs = CryptService(URL, PUBLIC_URL, os.environ['API_KEY'], os.environ['API_SECRET'], "bitbank")
         self.ml = None
-        self.features = ["Close", "Volume", "MA_SHORT", "MA_LONG", "MIDPOINT", "MACD_macdhist", "MACD_macd", "MACD_macdsignal", "RSI", "OBV", "ATR", "STDDEV", "Coin", "JPY"]
+        # self.features = ["Open", "High", "Low", "Close", "Volume", "ma_diff", "GCDC_times", "BBANDS_upperband", "BBANDS_middleband", "BBANDS_lowerband", "MA_SHORT", "MA_LONG", "MIDPOINT", "MACD_macd", "MACD_macdsignal", "MACD_macdhist", "RSI", "OBV", "ATR", "STDDEV", "DEMA", "EMA", "HT_TRENDLINE", "KAMA", "SMA", "T3", "TEMA", "TRIMA", "WMA", "ADX", "ADXR", "APO", "AROON_aroondown", "AROON_aroonup", "AROONOSC", "BOP", "CCI", "DX", "MFI", "MINUS_DI", "MINUS_DM", "MOM", "PLUS_DI", "PLUS_DM", "STOCH_slowk", "STOCH_slowd", "STOCHF_fastk", "STOCHF_fastd", "STOCHRSI_fastk", "STOCHRSI_fastd", "TRIX", "ULTOSC", "WILLR", "AD", "ADOSC", "NATR", "TRANGE", "HT_DCPERIOD", "HT_DCPHASE", "HT_PHASOR_inphase", "HT_PHASOR_quadrature", "HT_SINE_sine", "HT_SINE_leadsine", "HT_TRENDMODE", "BETA", "CORREL", "LINEARREG", "LINEARREG_ANGLE", "LINEARREG_INTERCEPT", "LINEARREG_SLOPE", "JPY", "Coin"]
+        self.features = ["MA_LONG", "EMA", "MA_SHORT", "BBANDS_middleband", "BBANDS_lowerband", "HT_TRENDLINE"]
         # self.features = ["BBANDS_upperband", "BBANDS_lowerband", "MA_SHORT", "MA_LONG", "MIDPOINT", "MACD_macdsignal", "RSI", "OBV", "ATR", "STDDEV", "STOCH_slowk", "STOCH_slowd", "STOCHRSI_fastk", "STOCHRSI_fastd", "Coin", "JPY"]
 
         # 1. ロガーを取得する
@@ -132,7 +133,7 @@ class AutoTrade:
         df['CCI'] = talib.CCI(high, low, close, timeperiod=14)
         df['DX'] = talib.DX(high, low, close, timeperiod=14)
         df['MACD_macd'], df['MACD_macdsignal'], df['MACD_macdhist'] = talib.MACD(close, fastperiod=12, slowperiod=26, signalperiod=9)
-        skip MACDEXT MACDFIX たぶん同じなので
+        # skip MACDEXT MACDFIX たぶん同じなので
         df['MFI'] = talib.MFI(high, low, close, volume, timeperiod=14)
         df['MINUS_DI'] = talib.MINUS_DI(high, low, close, timeperiod=14)
         df['MINUS_DM'] = talib.MINUS_DM(high, low, timeperiod=14)
@@ -337,15 +338,11 @@ class AutoTrade:
             # df = df.drop(['BUYSELL', '_CLOSE_PCT_CHANGE', 'SimulateAsset', 'Profit', 'Coin', 'JPY', 'Songiri'], axis=1)
             pred_df = self.ml.predict(df[-1:])
             yen = df['JPY'][-1]
-            print(f"{df['JPY']=}")
             border = yen*0.05
-            print(f"{border=}")
             if int(pred_df[0]) < -border:
                 buysell = SELL
             elif int(pred_df[0]) > border:
                 buysell = BUY
-
-            pass
 
         elif logic == 0:
             if self.buysell_by_vol(df):
@@ -1021,12 +1018,14 @@ class AutoTrade:
 
                 return result
 
-            ac = all_combination(self.features)
-            features_list = [f for f in ac if len(f) >= 8]
-
+            # ac = all_combination(self.features)
+            # features_list = [f for f in ac if len(f) >= 8]
+            self.ml = MachineLearning()
+            features_list = [self.features]
             print(f"学習回数：{len(features_list)}")
 
             ml_ret = {}
+            self.ml.show_corr(df)
 
             for f in features_list:
                 print(f)
@@ -1035,7 +1034,6 @@ class AutoTrade:
                 y = df[['BUYSELL_PRICE']]
 
                 # 学習実施
-                self.ml = MachineLearning()
                 score = self.ml.learn(X, y, 'test_model.pkl')
 
                 ml_ret[",".join(f)] = score
