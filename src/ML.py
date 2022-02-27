@@ -8,6 +8,7 @@ from sklearn.metrics import confusion_matrix
 from sklearn.model_selection import RandomizedSearchCV
 import pandas as pd
 import numpy as np
+import matplotlib.pyplot as plt
 
 import lightgbm as lgb
 import seaborn as sns
@@ -53,27 +54,27 @@ class MachineLearning:
           R2 = 0.30452972156647884
 
         """
-        params = {'reg_alpha': [0.1],
-             'reg_lambda': [0.003],
-             'num_leaves': [8],
-             'colsample_bytree': [0.7],
-             'subsample': [1.0],
-             'subsample_freq': [2],
-             "learning_rate": [0.1],
-             "max_depth": [8],
-             'min_child_samples': [3]
-             }            # 学習時fitパラメータ指定
-
-        # params = {'reg_alpha': [0.0001, 0.0003, 0.001, 0.003, 0.01, 0.03, 0.1],
-        #      'reg_lambda': [0.0001, 0.0003, 0.001, 0.003, 0.01, 0.03, 0.1],
-        #      'num_leaves': [2, 4, 8, 10, 14, 20, 28, 32],
-        #      'colsample_bytree': [0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0],
-        #      'subsample': [0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0],
-        #      'subsample_freq': [0, 1, 2, 3, 4, 5, 6, 7],
-        #      "learning_rate": [0.1, 0.25, 0.5],
-        #      "max_depth": [4, 8, 16, 32],
-        #      'min_child_samples': [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+        # params = {'reg_alpha': [0.1],
+        #      'reg_lambda': [0.003],
+        #      'num_leaves': [8],
+        #      'colsample_bytree': [0.7],
+        #      'subsample': [1.0],
+        #      'subsample_freq': [2],
+        #      "learning_rate": [0.1],
+        #      "max_depth": [8],
+        #      'min_child_samples': [3]
         #      }            # 学習時fitパラメータ指定
+
+        params = {'reg_alpha': [0.0001, 0.0003, 0.001, 0.003, 0.01, 0.03, 0.1],
+             'reg_lambda': [0.0001, 0.0003, 0.001, 0.003, 0.01, 0.03, 0.1],
+             'num_leaves': [2, 4, 8, 10, 14, 20, 28, 32],
+             'colsample_bytree': [0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0],
+             'subsample': [0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0],
+             'subsample_freq': [0, 1, 2, 3, 4, 5, 6, 7],
+             "learning_rate": [0.1, 0.25, 0.5],
+             "max_depth": [4, 8, 16, 32],
+             'min_child_samples': [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+             }            # 学習時fitパラメータ指定
         fit_params = {'verbose': 0,  # 学習中のコマンドライン出力
             'early_stopping_rounds': 10,  # 学習時、評価指標がこの回数連続で改善しなくなった時点でストップ
             'eval_metric': 'r2',  # early_stopping_roundsの評価指標
@@ -82,9 +83,9 @@ class MachineLearning:
 
         reg = lgb.LGBMRegressor(boosting_type='gbdt', objective='regression', n_estimators=10000)
         # reg = xgb.XGBRegressor(objective='reg:squarederror')
-        k_fold = KFold(n_splits=2, shuffle=True, random_state=0)
+        k_fold = KFold(n_splits=5, shuffle=True, random_state=0)
         # grid = GridSearchCV(estimator=reg, param_grid=params, cv=k_fold, scoring="r2", verbose=2)
-        grid = RandomizedSearchCV(estimator=reg, param_distributions=params, scoring="r2", cv=k_fold, n_iter=1, random_state=0, verbose=0)
+        grid = RandomizedSearchCV(estimator=reg, param_distributions=params, scoring="r2", cv=k_fold, n_iter=10, random_state=0, verbose=2)
 
         grid.fit(X_train, y_train, **fit_params)
 
@@ -116,3 +117,17 @@ class MachineLearning:
 
         print("テストデータスコア")
         self.get_eval_score(y_test, y_test_pred)
+
+    def show_corr(self, data):
+        data_corr = data.corr()
+        print(data.corr())
+        df = data_corr.sort_values('BUYSELL_PRICE')
+        print(df['BUYSELL_PRICE'].head())
+        print(df['BUYSELL_PRICE'].tail(10))
+        x = len(data.columns)/1.5
+        plt.figure(figsize=(x, x))
+        sns.heatmap(data_corr, annot=True)
+        plt.title("Corr Heatmap")
+        plt.savefig("./corr.png", format="png")
+
+        # plt.show()
