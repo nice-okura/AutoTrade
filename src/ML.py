@@ -9,7 +9,7 @@ from sklearn.model_selection import RandomizedSearchCV
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-
+import umap
 import lightgbm as lgb
 import seaborn as sns
 import pickle
@@ -85,12 +85,15 @@ class MachineLearning:
         # reg = xgb.XGBRegressor(objective='reg:squarederror')
         k_fold = KFold(n_splits=5, shuffle=True, random_state=0)
         # grid = GridSearchCV(estimator=reg, param_grid=params, cv=k_fold, scoring="r2", verbose=2)
-        grid = RandomizedSearchCV(estimator=reg, param_distributions=params, scoring="r2", cv=k_fold, n_iter=10, random_state=0, verbose=2)
+        grid = RandomizedSearchCV(estimator=reg, param_distributions=params, scoring="r2", cv=k_fold, n_iter=3, random_state=0, verbose=2)
 
         grid.fit(X_train, y_train, **fit_params)
 
         print(f"ベストパラメータ：{grid.best_params_}")
         print(f"ベストスコア:{grid.best_score_}")
+
+        print(f"features: {X_train.columns}")
+        print(f"obj: {y_train.columns}")
 
         y_test_pred = grid.predict(X_test)
         y_test_pred = np.expand_dims(y_test_pred, 1)
@@ -99,6 +102,12 @@ class MachineLearning:
         self.get_eval_score(y_test, y_test_pred)
 
         self.model = grid
+
+        # feature importanceの確認
+        importance = pd.DataFrame(grid.best_estimator_.feature_importances_, index=X_train.columns, columns=['importance'])
+        importance = importance.sort_values('importance', ascending=False)
+        print(importance[importance['importance'] > 3000].index)
+        print(importance)
 
         if model_output_filename is not None:
             pickle.dump(grid, open(model_output_filename, 'wb'))
@@ -122,7 +131,7 @@ class MachineLearning:
         data_corr = data.corr()
         print(data.corr())
         df = data_corr.sort_values('BUYSELL_PRICE')
-        print(df['BUYSELL_PRICE'].head())
+        print(df['BUYSELL_PRICE'].head(15))
         print(df['BUYSELL_PRICE'].tail(10))
         x = len(data.columns)/1.5
         plt.figure(figsize=(x, x))
@@ -130,4 +139,15 @@ class MachineLearning:
         plt.title("Corr Heatmap")
         plt.savefig("./corr.png", format="png")
 
-        # plt.show()
+    def reduce(self, data):
+        # umapで2次元に削減
+        reducer = umap.UMAP(random_state=42)
+        reducer.fit(data)
+        embedding = reducer.transform(data)
+
+        # plot
+        plt.scatter(embedding[:, 0], embedding[:, 1], cmap='Spectral', s=5)
+        plt.gca().set_aspect('equal', 'datalim')
+        plt.colorbar(boundaries=np.arange(11)-0.5).set_ticks(np.arange(10))
+        plt.title('UMAP projection of the Digits dataset', fontsize=24);
+        plt.savefig('umap.png', format="png")

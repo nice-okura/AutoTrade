@@ -66,9 +66,14 @@ class AutoTrade:
         self.param = param
         self.cs = CryptService(URL, PUBLIC_URL, os.environ['API_KEY'], os.environ['API_SECRET'], "bitbank")
         self.ml = None
+        # 全特徴量
         # self.features = ["Open", "High", "Low", "Close", "Volume", "ma_diff", "GCDC_times", "BBANDS_upperband", "BBANDS_middleband", "BBANDS_lowerband", "MA_SHORT", "MA_LONG", "MIDPOINT", "MACD_macd", "MACD_macdsignal", "MACD_macdhist", "RSI", "OBV", "ATR", "STDDEV", "DEMA", "EMA", "HT_TRENDLINE", "KAMA", "SMA", "T3", "TEMA", "TRIMA", "WMA", "ADX", "ADXR", "APO", "AROON_aroondown", "AROON_aroonup", "AROONOSC", "BOP", "CCI", "DX", "MFI", "MINUS_DI", "MINUS_DM", "MOM", "PLUS_DI", "PLUS_DM", "STOCH_slowk", "STOCH_slowd", "STOCHF_fastk", "STOCHF_fastd", "STOCHRSI_fastk", "STOCHRSI_fastd", "TRIX", "ULTOSC", "WILLR", "AD", "ADOSC", "NATR", "TRANGE", "HT_DCPERIOD", "HT_DCPHASE", "HT_PHASOR_inphase", "HT_PHASOR_quadrature", "HT_SINE_sine", "HT_SINE_leadsine", "HT_TRENDMODE", "BETA", "CORREL", "LINEARREG", "LINEARREG_ANGLE", "LINEARREG_INTERCEPT", "LINEARREG_SLOPE", "JPY", "Coin"]
-        self.features = ["MA_LONG", "EMA", "MA_SHORT", "BBANDS_middleband", "BBANDS_lowerband", "HT_TRENDLINE"]
+        # High Importance features
+        self.features = ['BOP', 'HT_PHASOR_quadrature', 'STDDEV', 'BETA', 'HT_PHASOR_inphase', 'TRANGE', 'LINEARREG', 'Volume', 'DX', 'NATR', 'PLUS_DI', 'HT_DCPERIOD', 'CORREL', 'BBANDS_lowerband', 'BBANDS_upperband', 'MFI', 'MINUS_DI', 'ADOSC', 'ULTOSC', 'DEMA', 'HT_SINE_sine', 'ADX', 'STOCH_slowd', 'STOCHF_fastk', 'STOCHRSI_fastd', 'HT_SINE_leadsine', 'BBANDS_middleband', 'TEMA', 'RSI', 'MOM', 'MINUS_DM', 'GCDC_times', 'ADXR']
+
+        # self.features = ["MA_LONG", "EMA", "MA_SHORT", "BBANDS_middleband", "BBANDS_lowerband", "HT_TRENDLINE"]
         # self.features = ["BBANDS_upperband", "BBANDS_lowerband", "MA_SHORT", "MA_LONG", "MIDPOINT", "MACD_macdsignal", "RSI", "OBV", "ATR", "STDDEV", "STOCH_slowk", "STOCH_slowd", "STOCHRSI_fastk", "STOCHRSI_fastd", "Coin", "JPY"]
+        # self.features = ["RSI", "MACD_macd", "ma_diff", "MACD_macdsignal", "STOCH_slowk", "STOCH_slowd", "MACD_macdhist", "Close", "Low", "High", "Open", "STOCHRSI_fastk", "STOCHRSI_fastd"]
 
         # 1. ロガーを取得する
         logger = logging.getLogger(__name__)
@@ -1025,7 +1030,9 @@ class AutoTrade:
             print(f"学習回数：{len(features_list)}")
 
             ml_ret = {}
-            self.ml.show_corr(df)
+            # self.ml.show_corr(df)
+
+            # self.ml.reduce(df)
 
             for f in features_list:
                 print(f)
@@ -1111,14 +1118,6 @@ class AutoTrade:
 
                 # グラフ描画
                 self.save_gragh(sim_df, "simulate00.png")
-
-                # df内の各パラメータの相関を確認
-                # import seaborn as sns
-                # df_corr = df.corr()
-                # plt.figure(figsize=(60,40))
-                # sns.heatmap(df_corr, annot=True)
-                # plt.title("Corr Heatmap")
-                # plt.savefig("heatmap.png", format="png")
 
             else:
                 """
