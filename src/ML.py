@@ -106,7 +106,7 @@ class MachineLearning:
         # feature importanceの確認
         importance = pd.DataFrame(grid.best_estimator_.feature_importances_, index=X_train.columns, columns=['importance'])
         importance = importance.sort_values('importance', ascending=False)
-        print(importance[importance['importance'] > 3000].index)
+        print(importance[importance['importance'] < 4000].index)
         print(importance)
 
         if model_output_filename is not None:
