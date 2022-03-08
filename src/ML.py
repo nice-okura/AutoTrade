@@ -6,6 +6,8 @@ from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 from sklearn.metrics import accuracy_score
 from sklearn.metrics import confusion_matrix
 from sklearn.model_selection import RandomizedSearchCV
+from xfeat import SelectNumerical
+from xfeat import ArithmeticCombinations, Pipeline
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
@@ -106,8 +108,8 @@ class MachineLearning:
         # feature importanceの確認
         importance = pd.DataFrame(grid.best_estimator_.feature_importances_, index=X_train.columns, columns=['importance'])
         importance = importance.sort_values('importance', ascending=False)
-        print(importance[importance['importance'] < 4000].index)
-        print(importance)
+        print(f"importance < 4000 :{importance[importance['importance'] < 4000].index}")
+        print(f"全特徴量とimportance: \r\n{importance}")
 
         if model_output_filename is not None:
             pickle.dump(grid, open(model_output_filename, 'wb'))
@@ -151,3 +153,32 @@ class MachineLearning:
         plt.colorbar(boundaries=np.arange(11)-0.5).set_ticks(np.arange(10))
         plt.title('UMAP projection of the Digits dataset', fontsize=24);
         plt.savefig('umap.png', format="png")
+
+    def feature_engineering(self, data):
+        cols = data.columns.tolist()
+
+        # 複数のカラムを組み合わせた特徴量を作成するパイプライン
+        encoder = Pipeline([
+            ArithmeticCombinations(input_cols=cols,
+                                    drop_origin=False,
+                                    operator="+",
+                                    r=2,
+                                    output_suffix="_plus"),
+            ArithmeticCombinations(input_cols=cols,
+                                    drop_origin=False,
+                                    operator="*",
+                                    r=2,
+                                    output_suffix="_mul"),
+            ArithmeticCombinations(input_cols=cols,
+                                    drop_origin=False,
+                                    operator="-",
+                                    r=2,
+                                    output_suffix="_minus"),
+            ArithmeticCombinations(input_cols=cols,
+                                    drop_origin=False,
+                                    operator="+",
+                                    r=3,
+                                    output_suffix="_plus"),
+        ])
+
+        return encoder.fit_transform(data)

@@ -1032,14 +1032,16 @@ class AutoTrade:
 
             ml_ret = {}
             # self.ml.show_corr(df)
-
             # self.ml.reduce(df)
 
             for f in features_list:
                 print(f)
-                # X = df[self.features]
-                X = df[f]
                 y = df[['BUYSELL_PRICE']]
+                df = df[f] # 未来特徴量は削除
+
+                # 特徴量エンジニアリング
+                X = self.ml.feature_engineering(df)
+                print(X.columns)
 
                 # 学習実施
                 score = self.ml.learn(X, y, 'test_model.pkl')
