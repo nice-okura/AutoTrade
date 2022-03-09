@@ -342,12 +342,7 @@ class AutoTrade:
             """
             df = df[self.features]
             # df = df.drop(['BUYSELL', '_CLOSE_PCT_CHANGE', 'SimulateAsset', 'Profit', 'Coin', 'JPY', 'Songiri'], axis=1)
-            # 予測
-            # 0~2の分類となるため、-1 して
-            # 0 -> SELL(-1)
-            # 2 -> BUY(1)
-            # に変換する
-            pred = self.ml.predict(df[-1:])[0]
+            pred = self.ml.predict(df[-1:])
             buysell = pred
 
         elif logic == 0:
@@ -622,13 +617,30 @@ class AutoTrade:
 
         position_df = pd.DataFrame()
 
+        if self.ml is not None:
+            """
+            機械学習用モデルが設定されている場合は
+            1行ずつ予測ではなく全行一度に予測する
+            """
+            df['BUYSELL'] = self.ml.predict(df[self.features])
+
         for i, r in df.iterrows():
             tmp_df = pd.DataFrame([r])
             coin_price = tmp_df['Close'][0]  # 購入する仮想通貨の現在の価格
 
             pct_chg = tmp_df['_CLOSE_PCT_CHANGE'][0]
 
-            if self.buyORsell(tmp_df) == BUY:
+            if self.ml is not None:
+                """
+                機械学習用モデルが設定されている場合は
+                BUYSELLがすでに設定されているため
+                buyORsellメソッドは呼ばない
+                """
+                buysell = tmp_df['BUYSELL'][0]
+            else:
+                buysell = self.buyORsell(tmp_df)
+
+            if buysell == BUY:
                 """
                 購　入
                 """
@@ -644,7 +656,7 @@ class AutoTrade:
                 else:
                     print(f"{buy_price-yen:.0f}円 不足")
 
-            elif self.buyORsell(tmp_df) == SELL:
+            elif buysell == SELL:
                 """
                 売　却
                 """
