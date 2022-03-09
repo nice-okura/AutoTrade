@@ -38,7 +38,7 @@ class Parameter:
                  weight_of_price=0.05, # 連続MA回数から購入金額を決めるときの重み
                  logic=0,
                  price_decision_logic=0,
-                 songiri=True,
+                 songiri=False,
                  songiri_perc=0.1, # 損切する価格変動ボーダー
                  ml_model=None):
 
@@ -67,9 +67,9 @@ class AutoTrade:
         self.cs = CryptService(URL, PUBLIC_URL, os.environ['API_KEY'], os.environ['API_SECRET'], "bitbank")
         self.ml = None
         # 全特徴量
-        # self.features = ["Open", "High", "Low", "Close", "Volume", "ma_diff", "GCDC_times", "BBANDS_upperband", "BBANDS_middleband", "BBANDS_lowerband", "MA_SHORT", "MA_LONG", "MIDPOINT", "MACD_macd", "MACD_macdsignal", "MACD_macdhist", "RSI", "OBV", "ATR", "STDDEV", "DEMA", "EMA", "HT_TRENDLINE", "KAMA", "SMA", "T3", "TEMA", "TRIMA", "WMA", "ADX", "ADXR", "APO", "AROON_aroondown", "AROON_aroonup", "AROONOSC", "BOP", "CCI", "DX", "MFI", "MINUS_DI", "MINUS_DM", "MOM", "PLUS_DI", "PLUS_DM", "STOCH_slowk", "STOCH_slowd", "STOCHF_fastk", "STOCHF_fastd", "STOCHRSI_fastk", "STOCHRSI_fastd", "TRIX", "ULTOSC", "WILLR", "AD", "ADOSC", "NATR", "TRANGE", "HT_DCPERIOD", "HT_DCPHASE", "HT_PHASOR_inphase", "HT_PHASOR_quadrature", "HT_SINE_sine", "HT_SINE_leadsine", "HT_TRENDMODE", "BETA", "CORREL", "LINEARREG", "LINEARREG_ANGLE", "LINEARREG_INTERCEPT", "LINEARREG_SLOPE", "JPY", "Coin"]
+        self.features = ["Open", "High", "Low", "Close", "Volume", "ma_diff", "GCDC_times", "BBANDS_upperband", "BBANDS_middleband", "BBANDS_lowerband", "MA_SHORT", "MA_LONG", "MIDPOINT", "MACD_macd", "MACD_macdsignal", "MACD_macdhist", "RSI", "OBV", "ATR", "STDDEV", "DEMA", "EMA", "HT_TRENDLINE", "KAMA", "SMA", "T3", "TEMA", "TRIMA", "WMA", "ADX", "ADXR", "APO", "AROON_aroondown", "AROON_aroonup", "AROONOSC", "BOP", "CCI", "DX", "MFI", "MINUS_DI", "MINUS_DM", "MOM", "PLUS_DI", "PLUS_DM", "STOCH_slowk", "STOCH_slowd", "STOCHF_fastk", "STOCHF_fastd", "STOCHRSI_fastk", "STOCHRSI_fastd", "TRIX", "ULTOSC", "WILLR", "AD", "ADOSC", "NATR", "TRANGE", "HT_DCPERIOD", "HT_DCPHASE", "HT_PHASOR_inphase", "HT_PHASOR_quadrature", "HT_SINE_sine", "HT_SINE_leadsine", "HT_TRENDMODE", "BETA", "CORREL", "LINEARREG", "LINEARREG_ANGLE", "LINEARREG_INTERCEPT", "LINEARREG_SLOPE", "JPY", "Coin"]
         # High Importance features
-        self.features = ['CORREL', 'BBANDS_lowerband', 'BBANDS_upperband', 'MFI', 'MINUS_DI', 'ADOSC', 'ULTOSC', 'DEMA', 'HT_SINE_sine', 'ADX', 'STOCH_slowd','STOCHF_fastk', 'STOCHRSI_fastd', 'HT_SINE_leadsine', 'BBANDS_middleband', 'TEMA', 'RSI', 'MOM', 'MINUS_DM', 'GCDC_times',  'ADXR', 'JPY', 'STOCH_slowk', 'HT_DCPHASE', 'WILLR', 'PLUS_DM', 'MACD_macdhist', 'KAMA', 'MIDPOINT', 'TRIX', 'APO', 'CCI', 'Coin', 'OBV', 'AD', 'LINEARREG_ANGLE', 'ATR', 'ma_diff', 'LINEARREG_INTERCEPT', 'MA_LONG', 'T3', 'MACD_macdsignal', 'EMA', 'MACD_macd', 'HT_TRENDLINE', 'Open', 'SMA', 'WMA', 'STOCHRSI_fastk', 'AROONOSC', 'TRIMA', 'AROON_aroondown', 'AROON_aroonup', 'Low', 'High', 'Close', 'HT_TRENDMODE', 'MA_SHORT', 'STOCHF_fastd', 'LINEARREG_SLOPE']
+        # self.features = ['CORREL', 'BBANDS_lowerband', 'BBANDS_upperband', 'MFI', 'MINUS_DI', 'ADOSC', 'ULTOSC', 'DEMA', 'HT_SINE_sine', 'ADX', 'STOCH_slowd','STOCHF_fastk', 'STOCHRSI_fastd', 'HT_SINE_leadsine', 'BBANDS_middleband', 'TEMA', 'RSI', 'MOM', 'MINUS_DM', 'GCDC_times',  'ADXR', 'JPY', 'STOCH_slowk', 'HT_DCPHASE', 'WILLR', 'PLUS_DM', 'MACD_macdhist', 'KAMA', 'MIDPOINT', 'TRIX', 'APO', 'CCI', 'Coin', 'OBV', 'AD', 'LINEARREG_ANGLE', 'ATR', 'ma_diff', 'LINEARREG_INTERCEPT', 'MA_LONG', 'T3', 'MACD_macdsignal', 'EMA', 'MACD_macd', 'HT_TRENDLINE', 'Open', 'SMA', 'WMA', 'STOCHRSI_fastk', 'AROONOSC', 'TRIMA', 'AROON_aroondown', 'AROON_aroonup', 'Low', 'High', 'Close', 'HT_TRENDMODE', 'MA_SHORT', 'STOCHF_fastd', 'LINEARREG_SLOPE']
         # self.features = ['BOP', 'HT_PHASOR_quadrature', 'STDDEV', 'BETA', 'HT_PHASOR_inphase', 'TRANGE', 'LINEARREG', 'Volume', 'DX', 'NATR', 'PLUS_DI', 'HT_DCPERIOD', 'CORREL', 'BBANDS_lowerband', 'BBANDS_upperband', 'MFI', 'MINUS_DI', 'ADOSC', 'ULTOSC', 'DEMA', 'HT_SINE_sine', 'ADX', 'STOCH_slowd', 'STOCHF_fastk', 'STOCHRSI_fastd', 'HT_SINE_leadsine', 'BBANDS_middleband', 'TEMA', 'RSI', 'MOM', 'MINUS_DM', 'GCDC_times', 'ADXR']
 
         # self.features = ["MA_LONG", "EMA", "MA_SHORT", "BBANDS_middleband", "BBANDS_lowerband", "HT_TRENDLINE"]
@@ -342,14 +342,16 @@ class AutoTrade:
             """
             df = df[self.features]
             # df = df.drop(['BUYSELL', '_CLOSE_PCT_CHANGE', 'SimulateAsset', 'Profit', 'Coin', 'JPY', 'Songiri'], axis=1)
-            pred_df = self.ml.predict(df[-1:])
-            yen = df['JPY'][-1]
-            border = yen*0.05
-            if int(pred_df[0]) < -border:
-                buysell = SELL
-            elif int(pred_df[0]) > border:
-                buysell = BUY
+            # 予測
+            # 0~2の分類となるため、-1 して
+            # 0 -> SELL(-1)
+            # 2 -> BUY(1)
+            # に変換する
+            pred = np.argmax(self.ml.predict(df[-1:])) - 1
+            if pred != 0:
+                print(pred)
 
+            buysell = pred
         elif logic == 0:
             if self.buysell_by_vol(df):
                 if (self.is_gcdc(df, self.param.MA_times) and gcdc == "GC") or self.buysell_by_rsi(df) == BUY:
@@ -431,7 +433,7 @@ class AutoTrade:
             ５単位時間後にどのくらい価格変化するかを表した指標（_CLOSE_PCT_CHANGE）が
             border%以上変化する場合、売買する。
             """
-            border = 0.05
+            border = 0.01
 
             if df['_CLOSE_PCT_CHANGE'][-1] >= border:
                 buysell = BUY
@@ -459,10 +461,10 @@ class AutoTrade:
             """
             機械学習のモデルを読み込んで売り買い判定する
             """
-            oneline_df = oneline_df[self.features]
-            pred_df = self.ml.predict(oneline_df[-1:])
-            BUYSELLprice = abs(int(pred_df))
-            # BUYSELLprice = 1000
+            # oneline_df = oneline_df[self.features]
+            # pred_df = self.ml.predict(oneline_df[-1:])
+            # BUYSELLprice = abs(int(pred_df))
+            BUYSELLprice = 1000
 
         elif price_decision_logic == 0:
             """
@@ -996,7 +998,7 @@ class AutoTrade:
         argparser.add_argument('-s', action='store_true', help='Simulate mode.') # シミュレートモード
         argparser.add_argument('--logic') # 売買価格決定ロジックの指定
         argparser.add_argument('-o') # シミュレート結果CSVの出力先指定
-        argparser.add_argument('--nosongiri', action='store_false', help='No Songiri mode.') # 損切するかしないか。デフォルトは損切する
+        argparser.add_argument('--songiri', action='store_true', help='Songiri mode.') # 損切するかしないか。デフォルトは損切する
         argparser.add_argument('--mlmodel') # 機械学習モデルのファイル名
         argparser.add_argument('--mlinput') # 機械学習するinputファイル名
         argparser.add_argument('--pdl') # price_decision_logic
@@ -1036,11 +1038,12 @@ class AutoTrade:
 
             for f in features_list:
                 print(f)
-                y = df[['BUYSELL_PRICE']]
-                df = df[f] # 未来特徴量は削除
+                y = df[['BUYSELL']]
+                X = df[f]
+                # df = df[f] # 未来特徴量は削除
 
                 # 特徴量エンジニアリング
-                X = self.ml.feature_engineering(df)
+                # X = self.ml.feature_engineering(df)
                 print(X.columns)
 
                 # 学習実施
@@ -1098,12 +1101,11 @@ class AutoTrade:
                 if args.o is not None:
                     output_filename = args.o
 
-                if args.nosongiri is not None:
-                    self.param.SONGIRI = args.nosongiri
+                if args.songiri is not None:
+                    self.param.SONGIRI = args.songiri
 
                 if args.pdl is not None:
                     self.param.PDL = int(args.pdl)
-
 
                 # シミュレーション開始
                 sim_df = self.simulate(df,
@@ -1178,3 +1180,5 @@ if __name__ == "__main__":
     at = AutoTrade(param)
 
     at.main()
+
+    # MachineLearning().pycaret()

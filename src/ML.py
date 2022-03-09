@@ -6,6 +6,7 @@ from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 from sklearn.metrics import accuracy_score
 from sklearn.metrics import confusion_matrix
 from sklearn.model_selection import RandomizedSearchCV
+from sklearn.preprocessing import MinMaxScaler
 from xfeat import SelectNumerical
 from xfeat import ArithmeticCombinations, Pipeline
 import pandas as pd
@@ -15,14 +16,15 @@ import umap
 import lightgbm as lgb
 import seaborn as sns
 import pickle
-
+from pycaret.classification import *
 
 class MachineLearning:
     def __init__(self, model_file=None):
         self.model = None
 
         if model_file is not None:
-            self.model = pickle.load(open(model_file, 'rb'))
+            self.model = load_model(model_name=model_file)
+            # self.model = pickle.load(open(model_file, 'rb'))
 
     def get_eval_score(self, y_true,y_pred):
 
@@ -37,6 +39,9 @@ class MachineLearning:
           print(f"  R2 = {r2score}")
 
     def learn(self, X, y, model_output_filename=None):
+        mmscaler = MinMaxScaler(feature_range=(0, 2), copy=True)
+        y['BUYSELL'] = mmscaler.fit_transform(y).astype('int')
+
         X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=0)
 
         # params = {"n_estimators": np.arange(0,100,10),
@@ -82,39 +87,50 @@ class MachineLearning:
             'eval_metric': 'r2',  # early_stopping_roundsの評価指標
             'eval_set': [(X_train, y_train)]  # early_stopping_roundsの評価指標算出用データ
             }
+        cls = lgb.LGBMRegressor(
+            boosting_type='gbdt',
+            objective='multiclass',
+            metric='multi_logloss',
+            num_class=3,
+            ).fit(X_train, y_train)
 
-        reg = lgb.LGBMRegressor(boosting_type='gbdt', objective='regression', n_estimators=10000)
+        y_train_pred = cls.predict(X_train)
+        y_train_pred = np.argmax(y_train_pred, axis=1)
+
+        y_test_pred = cls.predict(X_test)
+        y_test_pred = np.argmax(y_test_pred, axis=1)
+        self.model = cls
+
+        print(f"訓練データ正解率：{accuracy_score(y_train, y_train_pred)}")
+        print(f"テストデータ正解率：{accuracy_score(y_test, y_test_pred)}")
+        # reg = lgb.LGBMRegressor(boosting_type='gbdt', objective='', n_estimators=10000)
         # reg = xgb.XGBRegressor(objective='reg:squarederror')
-        k_fold = KFold(n_splits=5, shuffle=True, random_state=0)
+        # k_fold = KFold(n_splits=5, shuffle=True, random_state=0)
         # grid = GridSearchCV(estimator=reg, param_grid=params, cv=k_fold, scoring="r2", verbose=2)
-        grid = RandomizedSearchCV(estimator=reg, param_distributions=params, scoring="r2", cv=k_fold, n_iter=3, random_state=0, verbose=2)
+        # grid = RandomizedSearchCV(estimator=reg, param_distributions=params, scoring="r2", cv=k_fold, n_iter=3, random_state=0, verbose=2)
+        # grid.fit(X_train, y_train, **fit_params)
+        # print(f"ベストパラメータ：{grid.best_params_}")
+        # print(f"ベストスコア:{grid.best_score_}")
+        # print(f"features: {X_train.columns}")
+        # print(f"obj: {y_train.columns}")
 
-        grid.fit(X_train, y_train, **fit_params)
-
-        print(f"ベストパラメータ：{grid.best_params_}")
-        print(f"ベストスコア:{grid.best_score_}")
-
-        print(f"features: {X_train.columns}")
-        print(f"obj: {y_train.columns}")
-
-        y_test_pred = grid.predict(X_test)
-        y_test_pred = np.expand_dims(y_test_pred, 1)
-
-        print("テストデータスコア")
-        self.get_eval_score(y_test, y_test_pred)
-
-        self.model = grid
+        # y_test_pred = grid.predict(X_test)
+        # y_test_pred = np.expand_dims(y_test_pred, 1)
+        #
+        # print("テストデータスコア")
+        # self.get_eval_score(y_test, y_test_pred)
+        # self.model = grid
 
         # feature importanceの確認
-        importance = pd.DataFrame(grid.best_estimator_.feature_importances_, index=X_train.columns, columns=['importance'])
-        importance = importance.sort_values('importance', ascending=False)
-        print(f"importance < 4000 :{importance[importance['importance'] < 4000].index}")
-        print(f"全特徴量とimportance: \r\n{importance}")
+        # importance = pd.DataFrame(.feature_importances_, index=X_train.columns, columns=['importance'])
+        # importance = importance.sort_values('importance', ascending=False)
+        # print(f"importance < 4000 :{importance[importance['importance'] < 4000].index}")
+        # print(f"全特徴量とimportance: \r\n{importance}")
 
         if model_output_filename is not None:
-            pickle.dump(grid, open(model_output_filename, 'wb'))
+            pickle.dump(cls, open(model_output_filename, 'wb'))
 
-        return grid.best_score_
+        return accuracy_score(y_test, y_test_pred)
 
 
     def predict(self, data):
@@ -182,3 +198,24 @@ class MachineLearning:
         ])
 
         return encoder.fit_transform(data)
+
+    def pycaret(self):
+        df = pd.read_csv('./sampledata_200days_border001.csv', parse_dates=[0])
+        df = df.set_index('Date')
+        df = df.astype(float)
+        df['BUYSELL'] = df['BUYSELL'].astype(int)
+        df = df.dropna()
+        df = df.drop(['BUYSELL_PRICE', 'Songiri', '_CLOSE_PCT_CHANGE', 'Coin', 'JPY'], 1) # 目的変数（BUYSELL_PRICE）以外の不要な変数を削除
+
+        X = df.drop(['BUYSELL'], 1)
+        y = df[['BUYSELL']]
+        mmscaler = MinMaxScaler(feature_range=(0, 2), copy=True)
+        y['BUYSELL'] = mmscaler.fit_transform(y).astype('int')
+
+        ret = setup(df,
+            target="BUYSELL",
+            normalize=False,
+            train_size=0.8,
+            silent=True
+            )
+        compare_models(fold=10)
