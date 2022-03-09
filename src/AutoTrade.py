@@ -347,11 +347,9 @@ class AutoTrade:
             # 0 -> SELL(-1)
             # 2 -> BUY(1)
             # に変換する
-            pred = np.argmax(self.ml.predict(df[-1:])) - 1
-            if pred != 0:
-                print(pred)
-
+            pred = self.ml.predict(df[-1:])[0]
             buysell = pred
+
         elif logic == 0:
             if self.buysell_by_vol(df):
                 if (self.is_gcdc(df, self.param.MA_times) and gcdc == "GC") or self.buysell_by_rsi(df) == BUY:
@@ -1037,7 +1035,6 @@ class AutoTrade:
             # self.ml.reduce(df)
 
             for f in features_list:
-                print(f)
                 y = df[['BUYSELL']]
                 X = df[f]
                 # df = df[f] # 未来特徴量は削除
@@ -1106,6 +1103,8 @@ class AutoTrade:
 
                 if args.pdl is not None:
                     self.param.PDL = int(args.pdl)
+
+                print(np.histogram(self.ml.predict(df)))
 
                 # シミュレーション開始
                 sim_df = self.simulate(df,

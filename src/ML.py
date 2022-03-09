@@ -24,6 +24,7 @@ class MachineLearning:
 
         if model_file is not None:
             self.model = load_model(model_name=model_file)
+            print(self.model)
             # self.model = pickle.load(open(model_file, 'rb'))
 
     def get_eval_score(self, y_true,y_pred):
