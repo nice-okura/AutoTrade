@@ -175,7 +175,22 @@ class AutoTrade:
         df['LINEARREG_INTERCEPT'] = talib.LINEARREG_INTERCEPT(close, timeperiod=14) - close
         df['LINEARREG_SLOPE'] = talib.LINEARREG_SLOPE(close, timeperiod=14)
         df['STDDEV'] = talib.STDDEV(close, timeperiod=5, nbdev=1)
+
+        """
+        目的変数設定用指標
+        """
         df['_CLOSE_PCT_CHANGE'] = -close.pct_change(-5) # ５単位時間後との価格差
+        print(df['_CLOSE_PCT_CHANGE'])
+        # 価格が5%以上上昇：クラス2
+        # 価格が1%以上上昇：クラス1
+        # 価格が1%以上下降：クラス-1
+        # 価格が5%以上下降：クラス-2
+        # それ以外：クラス0
+        df['_CLIMB_RATE_CLASS'] = 0
+        df.loc[df['_CLOSE_PCT_CHANGE'] >= 0.05, '_CLIMB_RATE_CLASS'] = 2
+        df.loc[(df['_CLOSE_PCT_CHANGE'] >= 0.01) & (df['_CLOSE_PCT_CHANGE'] < 0.05), '_CLIMB_RATE_CLASS'] = 1
+        df.loc[(df['_CLOSE_PCT_CHANGE'] <= -0.01) & (df['_CLOSE_PCT_CHANGE'] > -0.05), '_CLIMB_RATE_CLASS'] = -1
+        df.loc[df['_CLOSE_PCT_CHANGE'] <= -0.05, '_CLIMB_RATE_CLASS'] = -2
 
         return df
 
@@ -343,6 +358,7 @@ class AutoTrade:
             df = df[self.features]
             # df = df.drop(['BUYSELL', '_CLOSE_PCT_CHANGE', 'SimulateAsset', 'Profit', 'Coin', 'JPY', 'Songiri'], axis=1)
             pred = self.ml.predict(df[-1:])
+
             buysell = pred
 
         elif logic == 0:
@@ -450,16 +466,7 @@ class AutoTrade:
         BUYSELLprice = 0.0
         price_decision_logic = self.param.PDL
 
-        if self.ml is not None:
-            """
-            機械学習のモデルを読み込んで売り買い判定する
-            """
-            # oneline_df = oneline_df[self.features]
-            # pred_df = self.ml.predict(oneline_df[-1:])
-            # BUYSELLprice = abs(int(pred_df))
-            BUYSELLprice = 1000
-
-        elif price_decision_logic == 0:
+        if price_decision_logic == 0:
             """
             パラメータで設定した価格で一律売買（重みづけなどなし）
             """
@@ -502,6 +509,25 @@ class AutoTrade:
                 # 買い
                 BUYSELLprice = jpy*np.abs(pct_chg*2.0)
                 # BUYSELLprice = jpy*np.abs(pct_chg*2.0)
+
+        elif price_decision_logic == -2:
+            """
+            n単位時間後の価格変化率をもとにした_CLIMB_RATE_CLASSから
+            売買価格を決める
+            価格が5%以上上昇：クラス 2　→　jpy * 0.1（手持ち日本円の10%）
+            価格が1%以上上昇：クラス 1　→　jpy * 0.05（手持ち日本円の5%）
+            価格が1%以上下降：クラス-1　→　coin * coin_price * 0.1（手持ちコインの10%）
+            価格が5%以上下降：クラス-2　→　coin * coin_price * 0.05（手持ちコインの5%）
+            """
+            crc = oneline_df['CRC'][0]
+            if crc == 2:
+                BUYSELLprice = jpy * 0.1
+            elif crc == 1:
+                BUYSELLprice = jpy * 0.05
+            elif crc == -1:
+                BUYSELLprice = coin*coin_price * 0.05
+            elif crc == -2:
+                BUYSELLprice = coin*coin_price * 0.1
 
         return BUYSELLprice
 
@@ -622,8 +648,15 @@ class AutoTrade:
             機械学習用モデルが設定されている場合は
             1行ずつ予測ではなく全行一度に予測する
             """
-            df['BUYSELL'] = self.ml.predict(df[self.features])
+            pred = self.ml.predict(df[self.features])
+            df['BUYSELL'] = pred
+            df.loc[df['BUYSELL']==-2, 'BUYSELL'] = -1
+            df.loc[df['BUYSELL']==2, 'BUYSELL'] = 1
 
+            df['CRC'] = pred
+            # print(np.histogram(df['BUYSELL']))
+            # df.to_csv("hist.csv")
+            # sys.exit()
         for i, r in df.iterrows():
             tmp_df = pd.DataFrame([r])
             coin_price = tmp_df['Close'][0]  # 購入する仮想通貨の現在の価格
@@ -697,7 +730,7 @@ class AutoTrade:
                     c = df.at[i, 'Coin']
                     ast = df.at[i, 'SimulateAsset']
                     pp = 1+df.at[i, 'Profit']/init_asset
-                    print(f"[{'買い' if bs == BUY else '売り'}:{t}] 売買価格：{p:.0f} 円：{y:.0f} コイン：{c:.1f} 資産：{ast:.0f} 利益率：{pp:.1%}")
+                    print(f"[{'買い' if bs == BUY else '売り'}:{t}] 売買価格：{p:.0f}  円：{y:.0f}  コイン：{c:.1f}  資産：{ast:.0f}  利益率：{pp:.1%}")
                     position_df = position_df.append(df.loc[i])
 
             # 所持コイン、所持日本円がマイナスになったら強制終了
@@ -1077,10 +1110,10 @@ class AutoTrade:
             else:
                 # 前日までのデータを収集
                 date = datetime.now()# - timedelta(days=1)
-                df = self.get_ohlcv(date, 48, self.param.CANDLE_TYPE)
+                df = self.get_ohlcv(date, 24*30, self.param.CANDLE_TYPE)
                 # df = self.get_ohlcv(date, 24*365, self.param.CANDLE_TYPE)
-                # df.to_csv("./sampledata_365days_ohlcv.csv")
-                # sys.exit()
+                df.to_csv("./latest_30days_ohlcv.csv")
+                sys.exit()
 
             # 機械学習モデルの読み込み
             if args.mlmodel is not None:
@@ -1116,7 +1149,8 @@ class AutoTrade:
                 if args.pdl is not None:
                     self.param.PDL = int(args.pdl)
 
-                print(np.histogram(self.ml.predict(df)))
+                if self.ml is not None:
+                    print(np.histogram(self.ml.predict(df)))
 
                 # シミュレーション開始
                 sim_df = self.simulate(df,
